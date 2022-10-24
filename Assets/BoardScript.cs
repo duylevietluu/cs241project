@@ -71,6 +71,13 @@ public class BoardScript : MonoBehaviour
                         Debug.Log("Checkmated");
                         this.enabled = false;
                     }
+
+                    // TEST DRAW
+                    if (Draw())
+                    {
+                        Debug.Log("Draw");
+                        this.enabled = false;
+                    }
                 }
                 else
                 {
@@ -139,7 +146,7 @@ public class BoardScript : MonoBehaviour
 
     // return true if an opposing piece can capture this, not considering their king
     // generally to check if a piece can capture opposing King at a position
-    // because if they can capture this, their King is not important
+    // because if they can capture the enemy King, their King is not important
     public bool KingSquareThreat(int col, int row, bool pieceWhite)
     {
         foreach (AbstractPieceScript piece in childScripts)
@@ -180,7 +187,50 @@ public class BoardScript : MonoBehaviour
         if (KingSafety(kingWhite))
             return false;
 
+        return CantMoveAnything(kingWhite);
+    }
 
+    // return true if it is a draw
+    public bool Draw()
+    {
+        // Insufficient materials
+        if (childScripts.Length <= 4)
+        {
+            int BishopKnightWhite = 0, OtherWhite = 0;
+            int BishopKnightBlack = 0, OtherBlack = 0;
+
+            foreach (AbstractPieceScript piece in childScripts)
+                if (piece.isWhite)
+                {
+                    if (piece.GetType() == typeof(BishopScript) || piece.GetType() == typeof(KnightScript))
+                        BishopKnightWhite++;
+                    else
+                        OtherWhite++;
+                }
+                else
+                {
+                    if (piece.GetType() == typeof(BishopScript) || piece.GetType() == typeof(KnightScript))
+                        BishopKnightBlack++;
+                    else
+                        OtherBlack++;
+                }
+
+            if (BishopKnightWhite <= 1 && OtherWhite <= 1
+                && BishopKnightBlack <= 1 && OtherBlack <= 1)
+                    return true;
+        }
+
+
+        // Stalemate
+        if (KingSafety(turnWhite) && CantMoveAnything(turnWhite))
+            return true;
+
+        return false;
+    }
+
+    // return true if a side can move any of their piece, without leaving their king in check
+    public bool CantMoveAnything(bool kingWhite)
+    {
         foreach (AbstractPieceScript piece in childScripts)
             if (piece.isWhite == kingWhite) // ally piece
                 for (int c = 1; c <= 8; c++)

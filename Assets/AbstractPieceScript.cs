@@ -66,8 +66,9 @@ abstract public class AbstractPieceScript : MonoBehaviour
 
                 rookCastled.MoveTo(4, rookCastled.row);
             }
-
         }
+        else
+            rookCastled = null;
 
         Vector3 vector3 = new Vector3(tocol - col, torow - row);
         transform.Translate(vector3, Space.World);
@@ -79,6 +80,9 @@ abstract public class AbstractPieceScript : MonoBehaviour
         // set hasMoved
         oldHasMoved = hasMoved;
         hasMoved = true;
+
+        // set pieceCaptured to null
+        pieceCaptured = null;
     }
 
 
