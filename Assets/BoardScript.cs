@@ -37,6 +37,10 @@ public class BoardScript : MonoBehaviour
         {
             piece.Init(this);
         }
+
+        // TEST
+        //MakeNewQueen(new Vector3(0, 0, 0));
+        //MakeNewQueen(new Vector3(1, 0, 0));
     }
 
     // Update is called once per frame
@@ -183,11 +187,8 @@ public class BoardScript : MonoBehaviour
     // return true if a king is checkmated; false otherwise
     public bool CheckMated(bool kingWhite)
     {
-        // if not check? - then not checkmated
-        if (KingSafety(kingWhite))
-            return false;
-
-        return CantMoveAnything(kingWhite);
+        // checked and cant get out of check
+        return !KingSafety(kingWhite) && CantMoveAnything(kingWhite);
     }
 
     // return true if it is a draw
@@ -274,4 +275,29 @@ public class BoardScript : MonoBehaviour
         piece.gameObject.SetActive(true);
     }
 
+    public void Promote(AbstractPieceScript pawn)
+    {
+        AbstractPieceScript[] queens = GetComponentsInChildren<QueenScript>();
+        AbstractPieceScript selectedQueen = null;
+
+        foreach (AbstractPieceScript piece in queens)
+            if (piece.isWhite == pawn.isWhite)
+            { 
+                selectedQueen = piece;
+                break;
+            }
+
+
+        AbstractPieceScript promoteTo = Instantiate(selectedQueen, 
+            pawn.transform.localPosition, selectedQueen.transform.rotation, this.transform);
+
+        promoteTo.col = pawn.col; promoteTo.row = pawn.row;
+        promoteTo.board = this;
+        promoteTo.hasMoved = pawn.hasMoved;
+        promoteTo.pieceCaptured = null; promoteTo.rookCastled = null;
+
+        DeletePiece(pawn);
+        RecoverPiece(promoteTo);
+
+    }
 }

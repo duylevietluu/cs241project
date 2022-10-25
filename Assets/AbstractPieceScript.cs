@@ -15,18 +15,6 @@ abstract public class AbstractPieceScript : MonoBehaviour
     public AbstractPieceScript pieceCaptured = null, rookCastled = null;
 
 
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
-
     // set col, row, isBlack
     public void Init(BoardScript boardInput)
     {
@@ -46,7 +34,9 @@ abstract public class AbstractPieceScript : MonoBehaviour
     abstract public bool LegalCapture(int tocol, int torow);
 
 
-    public void MoveTo(int tocol, int torow)
+    // try to change the col, row of the piece
+    // without changing sprite location
+    public void TryGoTo(int tocol, int torow, AbstractPieceScript pieceTo)
     {
         // CASTLING - move the rook
         if (this.GetType() == typeof(KingScript) && Mathf.Abs(tocol-col)==2)
@@ -56,7 +46,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
             {
                 rookCastled = board.FindPiece(8, row);
                 //rook.col == 8
-                rookCastled.MoveTo(6, rookCastled.row);
+                rookCastled.TryGoTo(6, rookCastled.row, null);
             }
             
             // queen side
@@ -64,14 +54,11 @@ abstract public class AbstractPieceScript : MonoBehaviour
             {
                 rookCastled = board.FindPiece(1, row);
 
-                rookCastled.MoveTo(4, rookCastled.row);
+                rookCastled.TryGoTo(4, rookCastled.row, null);
             }
         }
         else
             rookCastled = null;
-
-        Vector3 vector3 = new Vector3(tocol - col, torow - row);
-        transform.Translate(vector3, Space.World);
 
         // set col & row
         oldCol = col; oldRow = row;
@@ -81,28 +68,26 @@ abstract public class AbstractPieceScript : MonoBehaviour
         oldHasMoved = hasMoved;
         hasMoved = true;
 
-        // set pieceCaptured to null
-        pieceCaptured = null;
+        // set pieceCaptured, if any
+        pieceCaptured = pieceTo;
+
+        // delete pieceCaptured, if any
+        if (pieceCaptured != null)
+            board.DeletePiece(pieceTo);
     }
 
-
-    public void Capture(int tocol, int torow, AbstractPieceScript pieceTo)
+    // called after TryGoTo
+    // update based on col, row, oldcol, oldrow
+    public void UpdateLocation()
     {
-        this.MoveTo(tocol, torow);
-
-        //delete piece capture
-        pieceCaptured = pieceTo;
-        board.DeletePiece(pieceTo);
+        Vector3 vector3 = new Vector3(col - oldCol, row - oldRow);
+        transform.Translate(vector3, Space.World);
     }
 
 
     // undo a move or capture: only 1 time
-    public void Undo()
+    public void UndoTry()
     {
-        // move to original position
-        Vector3 vector3 = new Vector3(oldCol - col, oldRow - row);
-        transform.Translate(vector3, Space.World);
-
         // undo set col & row, hasMoved
         col = oldCol; row = oldRow;
         hasMoved = oldHasMoved;
@@ -110,7 +95,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
         // CASTLE - unmove the rook
         if (rookCastled != null)
         {
-            rookCastled.Undo();
+            rookCastled.UndoTry();
             rookCastled = null;
         }
 
@@ -123,9 +108,9 @@ abstract public class AbstractPieceScript : MonoBehaviour
     }
 
 
-    // Move or Capture at square tocol,torow
-    // return true if successful, false otherwise
-    public bool MoveOrCapture(int tocol, int torow)
+    // simulation: dont actually do Move or Capture at square tocol, torow
+    // just check whether it can move or capture there
+    public bool CanMoveOrCapture(int tocol, int torow)
     {
         // move/ capture to col row
         AbstractPieceScript pieceTo = board.FindPiece(tocol, torow);
@@ -135,46 +120,54 @@ abstract public class AbstractPieceScript : MonoBehaviour
             && pieceTo.isWhite != this.isWhite // opposing piece
             && this.LegalCapture(tocol, torow)) // legal capture?
         {
-            this.Capture(tocol, torow, pieceTo);
+            this.TryGoTo(tocol, torow, pieceTo);
 
-            if (board.KingSafety(this.isWhite))
-                return true;
-            else
-            {
-                this.Undo();
-                return false;
-            }
+            bool result = board.KingSafety(this.isWhite); // does the capture leave king safe?
+            
+            this.UndoTry();
+
+            return result;
         }
 
         // move
         else if (pieceTo == null // these is NO piece
                  && this.LegalMove(tocol, torow)) // legal move?
         {
-            this.MoveTo(tocol, torow);
+            this.TryGoTo(tocol, torow, pieceTo);
 
-            if (board.KingSafety(this.isWhite))
-                return true;
-            else
-            {
-                this.Undo();
-                return false;
-            }
+            bool result = board.KingSafety(this.isWhite);
+
+            this.UndoTry();
+
+            return result;
         }
 
         else
             return false;
     }
 
-
-    // simulation: dont actually do Move or Capture at square tocol, torow
-    // just check whether it can move or capture there
-    public bool CanMoveOrCapture(int tocol, int torow)
+    // ACTUALLY MOVE OR CAPTURE THING AND CHANGE SPRITE LOCATION
+    // Move or Capture at square tocol,torow
+    // return true if successful, false otherwise
+    public bool MoveOrCapture(int tocol, int torow)
     {
-        bool canDo = MoveOrCapture(tocol, torow);
-
-        if (canDo)
+        if (CanMoveOrCapture(tocol, torow))
         {
-            this.Undo();
+            AbstractPieceScript pieceTo = board.FindPiece(tocol, torow);
+
+            this.TryGoTo(tocol, torow, pieceTo);
+            this.UpdateLocation();
+
+            // capture checking
+            if (this.rookCastled != null)
+                rookCastled.UpdateLocation();
+
+            // promotion checking
+            if (this.GetType() == typeof(PawnScript) && (torow == 8 || torow == 1))
+            {
+                board.Promote(this);
+            }
+
             return true;
         }
         else
