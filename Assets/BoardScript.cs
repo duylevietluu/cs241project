@@ -277,7 +277,7 @@ public class BoardScript : MonoBehaviour
 
     public void Promote(AbstractPieceScript pawn)
     {
-        AbstractPieceScript[] queens = GetComponentsInChildren<QueenScript>();
+        AbstractPieceScript[] queens = Resources.FindObjectsOfTypeAll<QueenScript>();
         AbstractPieceScript selectedQueen = null;
 
         foreach (AbstractPieceScript piece in queens)
