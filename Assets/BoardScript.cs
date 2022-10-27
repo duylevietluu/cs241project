@@ -12,6 +12,7 @@ public class BoardScript : MonoBehaviour
     AbstractPieceScript pieceChoose = null;
     SelectboxScript selectbox;
     public Boolean turnWhite = true;
+    public AbstractPieceScript pawnGoneTwo = null; // for en passant
 
 
     // Start is called before the first frame update

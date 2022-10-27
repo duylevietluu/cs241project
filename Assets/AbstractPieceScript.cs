@@ -11,7 +11,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
     public int oldCol, oldRow;
     public bool isWhite;
     public BoardScript board;
-    public bool hasMoved, oldHasMoved; //used for castle checking
+    public bool hasMoved; //used for castle checking
     public AbstractPieceScript pieceCaptured = null, rookCastled = null;
 
 
@@ -64,14 +64,10 @@ abstract public class AbstractPieceScript : MonoBehaviour
         oldCol = col; oldRow = row;
         col = tocol; row = torow;
 
-        // set hasMoved
-        oldHasMoved = hasMoved;
-        hasMoved = true;
-
-        // set pieceCaptured, if any
+        // set pieceCaptured
         pieceCaptured = pieceTo;
 
-        // delete pieceCaptured, if any
+        // delete pieceCaptured from the board, if any
         if (pieceCaptured != null)
             board.DeletePiece(pieceTo);
     }
@@ -88,9 +84,8 @@ abstract public class AbstractPieceScript : MonoBehaviour
     // undo a move or capture: only 1 time
     public void UndoTry()
     {
-        // undo set col & row, hasMoved
+        // undo set col & row
         col = oldCol; row = oldRow;
-        hasMoved = oldHasMoved;
 
         // CASTLE - unmove the rook
         if (rookCastled != null)
@@ -142,6 +137,18 @@ abstract public class AbstractPieceScript : MonoBehaviour
             return result;
         }
 
+        // en passant
+        else if (PossiblePassant(tocol, torow)) 
+        {
+            this.TryGoTo(tocol, torow, board.pawnGoneTwo);
+
+            bool result = board.KingSafety(this.isWhite);
+
+            this.UndoTry();
+
+            return result;
+        }
+            
         else
             return false;
     }
@@ -155,18 +162,33 @@ abstract public class AbstractPieceScript : MonoBehaviour
         {
             AbstractPieceScript pieceTo = board.FindPiece(tocol, torow);
 
+            // CHECK FOR EN PASSANT
+            if (PossiblePassant(tocol, torow))
+                pieceTo = board.pawnGoneTwo;
+
+            // check if any pawn has just go 2 steps up
+            if (this.GetType() == typeof(PawnScript) && Math.Abs(torow - row) == 2)
+                board.pawnGoneTwo = this;
+            else
+                board.pawnGoneTwo = null;
+
+            // going
             this.TryGoTo(tocol, torow, pieceTo);
+
+            // move graphical location & set hasMoved
             this.UpdateLocation();
+            hasMoved = true;
 
-            // capture checking
+            // do this on rookCastled, if any
             if (this.rookCastled != null)
-                rookCastled.UpdateLocation();
-
-            // promotion checking
-            if (this.GetType() == typeof(PawnScript) && (torow == 8 || torow == 1))
             {
-                board.Promote(this);
+                rookCastled.UpdateLocation();
+                rookCastled.hasMoved = true;
             }
+            
+            // pawn promotion checking
+            if (this.GetType() == typeof(PawnScript) && (torow == 8 || torow == 1) )
+                board.Promote(this);
 
             return true;
         }
@@ -189,16 +211,24 @@ abstract public class AbstractPieceScript : MonoBehaviour
         else
             irow = (torow - frrow) / Math.Abs(torow - frrow);
 
-        //Debug.Log(icol + " " + irow);
 
         for (int c = frcol + icol, r = frrow + irow; 
               c != tocol || r != torow; 
               c += icol, r += irow)
         {
-            // Debug.Log(c + " " + r);
             if (board.HasPiece(c, r))
                 return true;
         }
         return false;
+    }
+
+    // return if a passant can be performed at tocol,torow
+    public bool PossiblePassant(int tocol, int torow)
+    {
+        return this.GetType() == typeof(PawnScript) // a pawn
+            && board.pawnGoneTwo != null // an opposing pawn has gone 2 steps
+            && tocol == board.pawnGoneTwo.col // correct tocol
+            && ((this.isWhite && torow == 6) || (!this.isWhite && torow == 3)) // correct torow
+            && this.LegalCapture(tocol, torow); // legal capture
     }
 }
