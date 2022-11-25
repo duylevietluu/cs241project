@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using Unity.Mathematics;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -14,6 +15,8 @@ public class BoardScript : MonoBehaviour
     public Boolean turnWhite = true;
     public AbstractPieceScript pawnGoneTwo = null; // for en passant
 
+    // stockfish AI
+    System.Diagnostics.Process stockfish = new System.Diagnostics.Process();
 
     // Start is called before the first frame update
     void Start()
@@ -39,15 +42,53 @@ public class BoardScript : MonoBehaviour
             piece.Init(this);
         }
 
-        // TEST
-        //MakeNewQueen(new Vector3(0, 0, 0));
-        //MakeNewQueen(new Vector3(1, 0, 0));
+        // init stockfish AI
+        // copied stuffs, best to tweak variable names later
+        stockfish.StartInfo.FileName = "Assets/stockfish_15_x64_avx2.exe";
+        stockfish.StartInfo.UseShellExecute = false;
+        stockfish.StartInfo.CreateNoWindow = true;
+        stockfish.StartInfo.RedirectStandardInput = true;
+        stockfish.StartInfo.RedirectStandardOutput = true;
+        stockfish.Start();
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (Input.GetMouseButtonDown(0))
+        // AI turn
+        if (!turnWhite)
+        {
+            Debug.Log("I'm thinking...");
+            string bestMove = GetBestMove();
+            
+            bestMove = bestMove.Substring(9, 4);
+            //Debug.Log(bestMove);
+
+            int fromCol = bestMove[0] - 'a' + 1, fromRow = bestMove[1] - '0';
+            int toCol = bestMove[2] - 'a' + 1, toRow = bestMove[3] - '0';
+
+            //Debug.Log(fromCol + " " + fromRow + " " + toCol + " " + toRow);
+
+            this.FindPiece(fromCol, fromRow).MoveOrCapture(toCol, toRow);
+            turnWhite = !turnWhite;
+
+            // TEST CHECKMATE
+            if (CheckMated(turnWhite))
+            {
+                Debug.Log("Checkmated");
+                this.enabled = false;
+            }
+
+            // TEST DRAW
+            if (Draw())
+            {
+                Debug.Log("Draw");
+                this.enabled = false;
+            }
+        }
+
+        // user turn
+        else if (Input.GetMouseButtonDown(0))
         {          
             Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
             // Debug.Log(mousePos.x + " " + mousePos.y);
@@ -66,9 +107,11 @@ public class BoardScript : MonoBehaviour
 
                 if (pieceChoose.MoveOrCapture(col, row)) 
                 {
-                    Debug.Log("piece moved");
-
                     turnWhite = !turnWhite;
+
+                    Debug.Log("piece moved");
+                    //Debug.Log(GetFenNotation());
+                    //Debug.Log(GetBestMove());
 
                     // TEST CHECKMATE
                     if (CheckMated(turnWhite))
@@ -301,4 +344,153 @@ public class BoardScript : MonoBehaviour
         RecoverPiece(promoteTo);
 
     }
+
+    string GetFenNotation()
+    {
+        StringBuilder ans = new StringBuilder(100);
+
+        // get 8 rows, from 8 to 1
+        for (int r = 8; r >= 1; --r)
+        {
+            int blank = 0;
+            for (int c = 1; c <= 8; ++c)
+            {
+                AbstractPieceScript piece = FindPiece(c, r);
+                if (piece == null)
+                    blank++;
+                else
+                {
+                    char p;
+                    if (blank > 0)
+                    {
+                        ans.Append(blank);
+                        blank = 0;
+                    }
+                        
+                    if (piece.GetType() == typeof(PawnScript))
+                        p = 'p';
+                    else if (piece.GetType() == typeof(RookScript))
+                        p = 'r';
+                    else if (piece.GetType() == typeof(KnightScript))
+                        p = 'n';
+                    else if (piece.GetType() == typeof(BishopScript))
+                        p = 'b';
+                    else if (piece.GetType() == typeof(QueenScript))
+                        p = 'q';
+                    else
+                        p = 'k';
+
+                    if (piece.isWhite)
+                        p = Char.ToUpper(p);
+
+                    ans.Append(p);
+                }
+
+            }
+            // closing off
+            if (blank > 0)
+            {
+                ans.Append(blank);
+                blank = 0;
+            }
+
+            if (r != 1) ans.Append('/');
+            else ans.Append(' ');
+        }
+
+        // who to go
+        if (turnWhite) ans.Append("w ");
+        else ans.Append("b ");
+
+        bool canCastle = false;
+
+        // white castling avaibility
+        if (!this.FindKing(true).hasMoved)
+        {
+            // kingside
+            AbstractPieceScript rook = this.FindPiece(8, 1);
+            if (rook != null && !rook.hasMoved)
+            {
+                canCastle = true;
+                ans.Append('K');
+            }
+
+            // queenside
+            rook = this.FindPiece(1, 1);
+            if (rook != null && !rook.hasMoved)
+            {
+                canCastle = true;
+                ans.Append('Q');
+            }
+        }
+
+        // black castling avaibility
+        if (!this.FindKing(false).hasMoved)
+        {
+            // kingside
+            AbstractPieceScript rook = this.FindPiece(8, 8);
+            if (rook != null && !rook.hasMoved)
+            {
+                canCastle = true;
+                ans.Append('k');
+            }
+
+            // queenside
+            rook = this.FindPiece(1, 8);
+            if (rook != null && !rook.hasMoved)
+            {
+                canCastle = true;
+                ans.Append('q');
+            }
+        }
+
+        // ending
+        if (!canCastle) ans.Append("- ");
+        else ans.Append(' ');
+
+        // en passant target square
+        if (pawnGoneTwo != null)
+        {
+            ans.Append((char)('a' - 1 + pawnGoneTwo.col));
+
+            if (pawnGoneTwo.isWhite)
+                ans.Append(pawnGoneTwo.row - 1);
+            else
+                ans.Append(pawnGoneTwo.row + 1);
+        }
+        else
+            ans.Append("-");
+
+        // insert number of moves, this is trivial
+        ans.Append(" 0 0");
+
+        return ans.ToString();
+    }
+
+    string GetBestMove()
+    {
+        string setupString = "position fen " + GetFenNotation();
+        stockfish.StandardInput.WriteLine(setupString);
+
+        // Process for 0.1 seconds
+        string processString = "go movetime 100";
+
+        // Process 20 deep
+        // string processString = "go depth 20";
+        
+        stockfish.StandardInput.WriteLine(processString);
+
+        string line;
+
+        do
+        {
+            line = stockfish.StandardOutput.ReadLine();
+        }
+        while (!(line.StartsWith("bestmove")));
+        
+        //stockfish.Close();
+
+        return line;
+    }
+
 }
