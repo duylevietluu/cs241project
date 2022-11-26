@@ -53,7 +53,7 @@ public class BoardScript : MonoBehaviour
     void Update()
     {
         // AI turn
-        if (!turnWhite)
+        if (false)
         {
             PlayBestMove();
 
@@ -486,13 +486,12 @@ public class BoardScript : MonoBehaviour
     // flip the board
     void FlipBoard()
     {
-        int newx = ((int)transform.localRotation.x + 180) % 360;
+        transform.localScale *= -1;
 
-        transform.localRotation = new Quaternion(newx, 0, 0, 0);
         foreach (AbstractPieceScript piece in childScripts)
-            piece.transform.localRotation = new Quaternion(newx, 0, 0, 0);
+            piece.transform.localScale *= -1;
 
-        selectbox.transform.localRotation = new Quaternion(newx, 0, 0, 0);
+        selectbox.transform.localScale *= -1;
 
     }
 }
