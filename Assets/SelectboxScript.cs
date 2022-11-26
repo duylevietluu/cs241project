@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class SelectboxScript : MonoBehaviour
@@ -20,7 +21,7 @@ public class SelectboxScript : MonoBehaviour
     public void MoveTo(int tocol, int torow)
     {
         Vector3 vector3 = new Vector3(tocol - col, torow - row);
-        transform.Translate(vector3, Space.World);
+        transform.localPosition += vector3;
         col = tocol; row = torow;
 
         //show

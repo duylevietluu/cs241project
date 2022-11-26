@@ -77,7 +77,10 @@ abstract public class AbstractPieceScript : MonoBehaviour
     public void UpdateLocation()
     {
         Vector3 vector3 = new Vector3(col - oldCol, row - oldRow);
-        transform.Translate(vector3, Space.World);
+
+        transform.localPosition += vector3;
+
+        //transform.Translate(vector3, Space.Self);
     }
 
 

@@ -21,12 +21,7 @@ public class BoardScript : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        Vector3 center = transform.position;
-
-        //Debug.Log(center.x + " " + center.y);
-
-        start = new Vector3(center.x - 4, center.y - 4, 0);
-
+        start = new Vector3(-4, -4, 0);
 
         // find Selectbox
         selectbox = GetComponentsInChildren<SelectboxScript>()[0];
@@ -43,13 +38,15 @@ public class BoardScript : MonoBehaviour
         }
 
         // init stockfish AI
-        // copied stuffs, best to tweak variable names later
         stockfish.StartInfo.FileName = "Assets/stockfish_15_x64_avx2.exe";
         stockfish.StartInfo.UseShellExecute = false;
         stockfish.StartInfo.CreateNoWindow = true;
         stockfish.StartInfo.RedirectStandardInput = true;
         stockfish.StartInfo.RedirectStandardOutput = true;
         stockfish.Start();
+
+        // flipboard?
+        // FlipBoard();
     }
 
     // Update is called once per frame
@@ -58,40 +55,17 @@ public class BoardScript : MonoBehaviour
         // AI turn
         if (!turnWhite)
         {
-            Debug.Log("I'm thinking...");
-            string bestMove = GetBestMove();
-            
-            bestMove = bestMove.Substring(9, 4);
-            //Debug.Log(bestMove);
+            PlayBestMove();
 
-            int fromCol = bestMove[0] - 'a' + 1, fromRow = bestMove[1] - '0';
-            int toCol = bestMove[2] - 'a' + 1, toRow = bestMove[3] - '0';
-
-            //Debug.Log(fromCol + " " + fromRow + " " + toCol + " " + toRow);
-
-            this.FindPiece(fromCol, fromRow).MoveOrCapture(toCol, toRow);
-            turnWhite = !turnWhite;
-
-            // TEST CHECKMATE
-            if (CheckMated(turnWhite))
-            {
-                Debug.Log("Checkmated");
-                this.enabled = false;
-            }
-
-            // TEST DRAW
-            if (Draw())
-            {
-                Debug.Log("Draw");
-                this.enabled = false;
-            }
+            PrintBestMove();
         }
 
         // user turn
         else if (Input.GetMouseButtonDown(0))
         {          
             Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            // Debug.Log(mousePos.x + " " + mousePos.y);
+
+            //Debug.Log(mousePos.x + " " + mousePos.y);
 
             int2 colrow = FindColRow(mousePos);
             int col = colrow.x, row = colrow.y;
@@ -100,7 +74,7 @@ public class BoardScript : MonoBehaviour
             if (col < 1 || col > 8 || row < 1 || row > 8)
                 return;
 
-            //Debug.Log("Inside: " + col + " " + row);
+            Debug.Log("Inside: " + col + " " + row);
 
             if (pieceChoose != null)
             {
@@ -110,8 +84,6 @@ public class BoardScript : MonoBehaviour
                     turnWhite = !turnWhite;
 
                     Debug.Log("piece moved");
-                    //Debug.Log(GetFenNotation());
-                    //Debug.Log(GetBestMove());
 
                     // TEST CHECKMATE
                     if (CheckMated(turnWhite))
@@ -128,9 +100,7 @@ public class BoardScript : MonoBehaviour
                     }
                 }
                 else
-                {
                     Debug.Log("illegal move");
-                }
 
                 pieceChoose = null;
                 selectbox.hide();
@@ -145,9 +115,7 @@ public class BoardScript : MonoBehaviour
                     pieceChoose = null;
 
                 if (pieceChoose != null)
-                {
                     selectbox.MoveTo(pieceChoose.col, pieceChoose.row);
-                }
             }
         }
     }
@@ -156,7 +124,11 @@ public class BoardScript : MonoBehaviour
     // return the col and row of a given Vector3 pos in WorldSpace
     public int2 FindColRow(Vector3 pos)
     {
-        Vector3 diff = pos - start;
+        //Vector3 diff = pos - start;
+        Vector3 diff = transform.InverseTransformPoint(pos) - start;
+
+        //Debug.Log(diff.x + " " + diff.y);
+
         int col = Mathf.CeilToInt(diff.x);
         int row = Mathf.CeilToInt(diff.y);
 
@@ -206,27 +178,6 @@ public class BoardScript : MonoBehaviour
 
         return false; 
     }
-
-    /*
-    // return true if an opposing piece can capture to this
-    // without leaving their King checked
-    public bool PieceSquareThreat(int col, int row, bool pieceWhite)
-    {
-        foreach (AbstractPieceScript piece in childScripts)
-            if (piece.isWhite != pieceWhite // opposing piece
-                && piece.CanMoveOrCapture(col, row)) // can capture
-            {
-                return true;
-            }
-
-        return false;
-    }
-
-    public bool PieceCanMoveTo(int col, int row, bool pieceWhite)
-    {
-        return PieceSquareThreat(col, row, !pieceWhite);
-    }
-    */
 
     // return true if a king is checkmated; false otherwise
     public bool CheckMated(bool kingWhite)
@@ -332,8 +283,10 @@ public class BoardScript : MonoBehaviour
             }
 
 
-        AbstractPieceScript promoteTo = Instantiate(selectedQueen, 
-            pawn.transform.localPosition, selectedQueen.transform.rotation, this.transform);
+        AbstractPieceScript promoteTo = Instantiate(selectedQueen, this.transform);
+
+        promoteTo.transform.localPosition = pawn.transform.localPosition;
+        promoteTo.transform.localRotation = pawn.transform.localRotation;
 
         promoteTo.col = pawn.col; promoteTo.row = pawn.row;
         promoteTo.board = this;
@@ -492,5 +445,54 @@ public class BoardScript : MonoBehaviour
 
         return line;
     }
+    
+    // for user: print the best move for user
+    void PrintBestMove()
+    {
+        Debug.Log(GetBestMove());
+    }
 
+    // for AI: play a best move, taken from Stockfish AI
+    void PlayBestMove()
+    {
+        //Debug.Log("I'm thinking...");
+        string bestMove = GetBestMove();
+
+        bestMove = bestMove.Substring(9, 4);
+
+        int fromCol = bestMove[0] - 'a' + 1, fromRow = bestMove[1] - '0';
+        int toCol = bestMove[2] - 'a' + 1, toRow = bestMove[3] - '0';
+
+        //Debug.Log(fromCol + " " + fromRow + " " + toCol + " " + toRow);
+
+        this.FindPiece(fromCol, fromRow).MoveOrCapture(toCol, toRow);
+        turnWhite = !turnWhite;
+
+        // TEST CHECKMATE
+        if (CheckMated(turnWhite))
+        {
+            Debug.Log("Checkmated");
+            this.enabled = false;
+        }
+
+        // TEST DRAW
+        if (Draw())
+        {
+            Debug.Log("Draw");
+            this.enabled = false;
+        }
+    }
+
+    // flip the board
+    void FlipBoard()
+    {
+        int newx = ((int)transform.localRotation.x + 180) % 360;
+
+        transform.localRotation = new Quaternion(newx, 0, 0, 0);
+        foreach (AbstractPieceScript piece in childScripts)
+            piece.transform.localRotation = new Quaternion(newx, 0, 0, 0);
+
+        selectbox.transform.localRotation = new Quaternion(newx, 0, 0, 0);
+
+    }
 }
