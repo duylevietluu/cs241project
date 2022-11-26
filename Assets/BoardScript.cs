@@ -12,7 +12,7 @@ public class BoardScript : MonoBehaviour
     AbstractPieceScript[] childScripts;
     AbstractPieceScript pieceChoose = null;
     SelectboxScript selectbox;
-    public Boolean turnWhite = true;
+    public Boolean turnWhite = true, aiwhite = false, aiblack = false;
     public AbstractPieceScript pawnGoneTwo = null; // for en passant
 
     // stockfish AI
@@ -53,11 +53,11 @@ public class BoardScript : MonoBehaviour
     void Update()
     {
         // AI turn
-        if (false)
+        if ((aiwhite && turnWhite) || (aiblack && !turnWhite))
         {
             PlayBestMove();
 
-            PrintBestMove();
+            // PrintBestMove();
         }
 
         // user turn
@@ -484,7 +484,7 @@ public class BoardScript : MonoBehaviour
     }
 
     // flip the board
-    void FlipBoard()
+    public void FlipBoard()
     {
         transform.localScale *= -1;
 
@@ -493,5 +493,31 @@ public class BoardScript : MonoBehaviour
 
         selectbox.transform.localScale *= -1;
 
+    }
+
+    // flip white ai
+    public void FlipAIWhite()
+    {
+        aiwhite = !aiwhite;
+
+        if (aiwhite && turnWhite)
+        {
+            // eliminate user choice of piece;
+            pieceChoose = null;
+            selectbox.hide();
+        }
+    }
+
+    // flip black ai
+    public void FlipAIBlack()
+    {
+        aiblack = !aiblack;
+
+        if (aiblack && !turnWhite)
+        {
+            // eliminate user choice of piece;
+            pieceChoose = null;
+            selectbox.hide();
+        }
     }
 }
