@@ -19,9 +19,9 @@ public class BoardScript : MonoBehaviour
     System.Diagnostics.Process stockfish = new System.Diagnostics.Process();
 
     // panel & promote
-    public PanelScript panel;
+    public GameObject panel;
     public AbstractPieceScript pawnPromoting = null;
-    public String choice = null;
+    public char choicePromote = ' ';
 
     // Start is called before the first frame update
     void Start()
@@ -51,8 +51,8 @@ public class BoardScript : MonoBehaviour
         stockfish.Start();
 
         // Promotion Panel
-        panel = Resources.FindObjectsOfTypeAll<PanelScript>()[0];
-        panel.gameObject.SetActive(false);
+        panel = GameObject.Find("PromotionPanel");
+        panel.SetActive(false);
     }
 
     // Update is called once per frame
@@ -288,22 +288,22 @@ public class BoardScript : MonoBehaviour
 
     public void Promote(AbstractPieceScript pawn)
     {
-        if (pawnPromoting == null)
+        if (pawnPromoting == null && !(aiwhite && turnWhite) && !(aiblack && !turnWhite))
         {
             pawnPromoting = pawn;
-            panel.gameObject.SetActive(true);
+            panel.SetActive(true);
             return;
         }
 
         AbstractPieceScript copy;
 
-        if (choice == "Queen")
+        if (choicePromote == 'q')
             copy = FindPieceType<QueenScript>(pawn.isWhite);
-        else if (choice == "Rook")
+        else if (choicePromote == 'r')
             copy = FindPieceType<RookScript>(pawn.isWhite);
-        else if (choice == "Bishop")
+        else if (choicePromote == 'b')
             copy = FindPieceType<BishopScript>(pawn.isWhite);
-        else if (choice == "Knight")
+        else if (choicePromote == 'k')
             copy = FindPieceType<KnightScript>(pawn.isWhite);
         else
             return;
@@ -322,14 +322,14 @@ public class BoardScript : MonoBehaviour
         RecoverPiece(promoteTo);
 
         // set to default
-        panel.gameObject.SetActive(false);
+        panel.SetActive(false);
         pawnPromoting = null;
-        choice = null;
+        choicePromote = ' ';
     }
 
     public void SetChoice(String piece)
     {
-        choice = piece;
+        choicePromote = piece[0];
     }
 
     string GetFenNotation()
@@ -490,18 +490,22 @@ public class BoardScript : MonoBehaviour
     void PlayBestMove()
     {
         //Debug.Log("I'm thinking...");
-        string bestMove = GetBestMove();
+        string bestMove = GetBestMove() + " ";
 
-        bestMove = bestMove.Substring(9, 4);
+        bestMove = bestMove.Substring(9, 5);
 
         int fromCol = bestMove[0] - 'a' + 1, fromRow = bestMove[1] - '0';
         int toCol = bestMove[2] - 'a' + 1, toRow = bestMove[3] - '0';
 
         //Debug.Log(fromCol + " " + fromRow + " " + toCol + " " + toRow);
 
+        // promoting
+        choicePromote = bestMove[4];
+
         this.FindPiece(fromCol, fromRow).MoveOrCapture(toCol, toRow);
         turnWhite = !turnWhite;
 
+        
         // TEST CHECKMATE
         if (CheckMated(turnWhite))
         {
