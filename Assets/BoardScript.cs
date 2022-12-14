@@ -18,6 +18,11 @@ public class BoardScript : MonoBehaviour
     // stockfish AI
     System.Diagnostics.Process stockfish = new System.Diagnostics.Process();
 
+    // panel & promote
+    public PanelScript panel;
+    public AbstractPieceScript pawnPromoting = null;
+    public String choice = null;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -45,13 +50,21 @@ public class BoardScript : MonoBehaviour
         stockfish.StartInfo.RedirectStandardOutput = true;
         stockfish.Start();
 
-        // flipboard?
-        // FlipBoard();
+        // Promotion Panel
+        panel = Resources.FindObjectsOfTypeAll<PanelScript>()[0];
+        panel.gameObject.SetActive(false);
     }
 
     // Update is called once per frame
     void Update()
     {
+        // if we are choosing things
+        if (pawnPromoting != null)
+        {
+            Promote(pawnPromoting);
+            return;
+        }
+
         // AI turn
         if ((aiwhite && turnWhite) || (aiblack && !turnWhite))
         {
@@ -146,11 +159,19 @@ public class BoardScript : MonoBehaviour
         return null;
     }
 
-    // find king of one side
-    public AbstractPieceScript FindKing(bool kingWhite)
+    public bool HasPiece(int col, int row)
     {
-        foreach (AbstractPieceScript piece in childScripts)
-            if (piece.GetType() == typeof(KingScript) && piece.isWhite == kingWhite)
+        return FindPiece(col, row) != null;
+    }
+
+    // find a piece of the type
+    // this can find even unavailable (disabled) pieces
+    public AbstractPieceScript FindPieceType<PieceType>(bool isWhite) where PieceType : AbstractPieceScript
+    {
+        AbstractPieceScript[] pieces = Resources.FindObjectsOfTypeAll<PieceType>();
+
+        foreach (AbstractPieceScript piece in pieces)
+            if (piece.isWhite == isWhite)
                 return piece;
 
         return null;
@@ -159,7 +180,7 @@ public class BoardScript : MonoBehaviour
     // return true if king is safe; false otherwise
     public bool KingSafety(bool kingWhite)
     {
-        AbstractPieceScript king = FindKing(kingWhite);
+        AbstractPieceScript king = FindPieceType<KingScript>(kingWhite);
 
         return !KingSquareThreat(king.col, king.row, king.isWhite);
     }
@@ -237,11 +258,6 @@ public class BoardScript : MonoBehaviour
         return true;
     }
 
-    public bool HasPiece(int col, int row)
-    {
-        return FindPiece(col, row) != null;
-    }
-
     // delete piece from list childScripts and destroy the gameObject attached
     public void DeletePiece(AbstractPieceScript piece)
     {
@@ -272,18 +288,27 @@ public class BoardScript : MonoBehaviour
 
     public void Promote(AbstractPieceScript pawn)
     {
-        AbstractPieceScript[] queens = Resources.FindObjectsOfTypeAll<QueenScript>();
-        AbstractPieceScript selectedQueen = null;
+        if (pawnPromoting == null)
+        {
+            pawnPromoting = pawn;
+            panel.gameObject.SetActive(true);
+            return;
+        }
 
-        foreach (AbstractPieceScript piece in queens)
-            if (piece.isWhite == pawn.isWhite)
-            { 
-                selectedQueen = piece;
-                break;
-            }
+        AbstractPieceScript copy;
 
-
-        AbstractPieceScript promoteTo = Instantiate(selectedQueen, this.transform);
+        if (choice == "Queen")
+            copy = FindPieceType<QueenScript>(pawn.isWhite);
+        else if (choice == "Rook")
+            copy = FindPieceType<RookScript>(pawn.isWhite);
+        else if (choice == "Bishop")
+            copy = FindPieceType<BishopScript>(pawn.isWhite);
+        else if (choice == "Knight")
+            copy = FindPieceType<KnightScript>(pawn.isWhite);
+        else
+            return;
+        
+        AbstractPieceScript promoteTo = Instantiate(copy, this.transform);
 
         promoteTo.transform.localPosition = pawn.transform.localPosition;
         promoteTo.transform.localRotation = pawn.transform.localRotation;
@@ -296,6 +321,15 @@ public class BoardScript : MonoBehaviour
         DeletePiece(pawn);
         RecoverPiece(promoteTo);
 
+        // set to default
+        panel.gameObject.SetActive(false);
+        pawnPromoting = null;
+        choice = null;
+    }
+
+    public void SetChoice(String piece)
+    {
+        choice = piece;
     }
 
     string GetFenNotation()
@@ -358,7 +392,7 @@ public class BoardScript : MonoBehaviour
         bool canCastle = false;
 
         // white castling avaibility
-        if (!this.FindKing(true).hasMoved)
+        if (!FindPieceType<KingScript>(true).hasMoved)
         {
             // kingside
             AbstractPieceScript rook = this.FindPiece(8, 1);
@@ -378,7 +412,7 @@ public class BoardScript : MonoBehaviour
         }
 
         // black castling avaibility
-        if (!this.FindKing(false).hasMoved)
+        if (!FindPieceType<KingScript>(false).hasMoved)
         {
             // kingside
             AbstractPieceScript rook = this.FindPiece(8, 8);
@@ -518,6 +552,23 @@ public class BoardScript : MonoBehaviour
             // eliminate user choice of piece;
             pieceChoose = null;
             selectbox.hide();
+        }
+    }
+
+    // UNO REVERSE: if human is playing with AI, flip the AI-human role
+    public void UnoReverse()
+    {
+        if (!aiwhite && aiblack)
+        {
+            FlipAIBlack();
+            FlipBoard();
+            FlipAIWhite();
+        }
+        else if (!aiblack && aiwhite)
+        {
+            FlipAIWhite();
+            FlipBoard();
+            FlipAIBlack();
         }
     }
 }
