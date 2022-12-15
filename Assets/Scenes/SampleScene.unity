@@ -215,7 +215,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: r
+          m_StringArgument: rook
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &2759061
@@ -454,7 +454,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: b
+          m_StringArgument: bishop
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &48894662
@@ -4302,7 +4302,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -251.18002, y: 0.94000244}
+  m_AnchoredPosition: {x: -251.18005, y: 0.94000244}
   m_SizeDelta: {x: -736, y: -87.8}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1561795919
@@ -5323,7 +5323,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: q
+          m_StringArgument: queen
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &1938778414
@@ -5562,7 +5562,7 @@ MonoBehaviour:
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: k
+          m_StringArgument: n(knight)
           m_BoolArgument: 0
         m_CallState: 2
 --- !u!114 &1978742641

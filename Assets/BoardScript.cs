@@ -303,7 +303,7 @@ public class BoardScript : MonoBehaviour
             copy = FindPieceType<RookScript>(pawn.isWhite);
         else if (choicePromote == 'b')
             copy = FindPieceType<BishopScript>(pawn.isWhite);
-        else if (choicePromote == 'k')
+        else if (choicePromote == 'n')
             copy = FindPieceType<KnightScript>(pawn.isWhite);
         else
             return;
