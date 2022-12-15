@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class KingScript : AbstractPieceScript
 {
+    //public GameObject checkmatebox;
     // return if it was possible to capture to a pos,
     // given that there is an opposing piece at that pos
     public override bool LegalCapture(int tocol, int torow)

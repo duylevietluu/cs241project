@@ -12,9 +12,10 @@ public class BoardScript : MonoBehaviour
     AbstractPieceScript[] childScripts;
     AbstractPieceScript pieceChoose = null;
     SelectboxScript selectbox;
+    SelectboxScript checkmatedbox;
+    SelectboxScript threatbox;
     public Boolean turnWhite = true, aiwhite = false, aiblack = false;
     public AbstractPieceScript pawnGoneTwo = null; // for en passant
-
     // stockfish AI
     System.Diagnostics.Process stockfish = new System.Diagnostics.Process();
 
@@ -31,7 +32,12 @@ public class BoardScript : MonoBehaviour
         // find Selectbox
         selectbox = GetComponentsInChildren<SelectboxScript>()[0];
         selectbox.hide();
-
+        // find CheckMatedBox
+        checkmatedbox = GetComponentsInChildren<SelectboxScript>()[0];
+        checkmatedbox.hide();
+        // find ThreatBox
+        threatbox = GetComponentsInChildren<SelectboxScript>()[0];
+        threatbox.hide();
 
         // findPos for all pieces, using start
 
@@ -98,19 +104,8 @@ public class BoardScript : MonoBehaviour
 
                     Debug.Log("piece moved");
 
-                    // TEST CHECKMATE
-                    if (CheckMated(turnWhite))
-                    {
-                        Debug.Log("Checkmated");
-                        this.enabled = false;
-                    }
-
-                    // TEST DRAW
-                    if (Draw())
-                    {
-                        Debug.Log("Draw");
-                        this.enabled = false;
-                    }
+                    KingUpdate();
+                    
                 }
                 else
                     Debug.Log("illegal move");
@@ -127,12 +122,43 @@ public class BoardScript : MonoBehaviour
                 if (pieceChoose != null && pieceChoose.isWhite != turnWhite)
                     pieceChoose = null;
 
-                if (pieceChoose != null)
+                if (pieceChoose != null) {
                     selectbox.MoveTo(pieceChoose.col, pieceChoose.row);
+                    Debug.Log(pieceChoose);
+                }
             }
         }
     }
 
+    private void KingUpdate()
+    {
+                // TEST CHECKMATE
+        if (CheckMated(turnWhite))
+        {
+            //threatbox.hide();
+            AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
+            checkmatedbox.MoveTo(king.col, king.row);
+            Debug.Log("Checkmated");
+
+            this.enabled = false;
+        }
+        else if (!KingSafety(turnWhite))
+        {
+            AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
+            threatbox.MoveTo(king.col, king.row); 
+
+        }
+        else
+        {
+            threatbox.hide();
+        }
+        // TEST DRAW
+        if (Draw())
+        {
+            Debug.Log("Draw");
+            this.enabled = false;
+        }
+    }
 
     // return the col and row of a given Vector3 pos in WorldSpace
     public int2 FindColRow(Vector3 pos)
@@ -181,7 +207,6 @@ public class BoardScript : MonoBehaviour
     public bool KingSafety(bool kingWhite)
     {
         AbstractPieceScript king = FindPieceType<KingScript>(kingWhite);
-
         return !KingSquareThreat(king.col, king.row, king.isWhite);
     }
 
@@ -191,12 +216,13 @@ public class BoardScript : MonoBehaviour
     public bool KingSquareThreat(int col, int row, bool pieceWhite)
     {
         foreach (AbstractPieceScript piece in childScripts)
+            
             if (piece.isWhite != pieceWhite // opposing piece
                 && piece.LegalCapture(col, row)) // can capture
-            {
+            {   
                 return true;
             }
-
+        
         return false; 
     }
 
@@ -506,21 +532,25 @@ public class BoardScript : MonoBehaviour
         turnWhite = !turnWhite;
 
         
-        // TEST CHECKMATE
-        if (CheckMated(turnWhite))
-        {
-            Debug.Log("Checkmated");
-            this.enabled = false;
-        }
+    //     // TEST CHECKMATE
+    //     if (CheckMated(turnWhite))
+    //     {
+    //         AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
+    //         checkmatedbox.MoveTo(king.col, king.row);
+    //         Debug.Log("Checkmated");
+    //         this.enabled = false;
+    //     }
 
-        // TEST DRAW
-        if (Draw())
-        {
-            Debug.Log("Draw");
-            this.enabled = false;
-        }
+    //     // TEST DRAW
+    //     if (Draw())
+    //     {
+    //         Debug.Log("Draw");
+    //         this.enabled = false;
+    //     }
+    // }
+
+        KingUpdate();
     }
-
     // flip the board
     public void FlipBoard()
     {
