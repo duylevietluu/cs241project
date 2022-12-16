@@ -8,14 +8,20 @@ using UnityEngine;
 
 public class BoardScript : MonoBehaviour
 {
+    // for pieces
     public Vector3 start;
     AbstractPieceScript[] childScripts;
     AbstractPieceScript pieceChoose = null;
-    SelectboxScript selectbox;
-    SelectboxScript checkmatedbox;
-    SelectboxScript threatbox;
+
+    // for UI elements: highlighting the pieces
+    GameObject selectBox;
+    GameObject checkmateBox;
+    GameObject threatBox;
+
+    // for other chess game elements
     public Boolean turnWhite = true, aiwhite = false, aiblack = false;
     public AbstractPieceScript pawnGoneTwo = null; // for en passant
+
     // stockfish AI
     System.Diagnostics.Process stockfish = new System.Diagnostics.Process();
 
@@ -29,18 +35,17 @@ public class BoardScript : MonoBehaviour
     {
         start = new Vector3(-4, -4, 0);
 
-        // find Selectbox
-        selectbox = GetComponentsInChildren<SelectboxScript>()[0];
-        selectbox.hide();
-        // find CheckMatedBox
-        checkmatedbox = GetComponentsInChildren<SelectboxScript>()[0];
-        checkmatedbox.hide();
-        // find ThreatBox
-        threatbox = GetComponentsInChildren<SelectboxScript>()[0];
-        threatbox.hide();
+        // find Boxes
+        selectBox = GameObject.Find("SelectBox");
+        selectBox.SetActive(false);
 
-        // findPos for all pieces, using start
+        checkmateBox = GameObject.Find("CheckmateBox");
+        checkmateBox.SetActive(false);
 
+        threatBox = GameObject.Find("ThreatBox");
+        threatBox.SetActive(false);
+
+        // init for all pieces
         childScripts = GetComponentsInChildren<AbstractPieceScript>();
 
         foreach (AbstractPieceScript piece in childScripts)
@@ -111,7 +116,7 @@ public class BoardScript : MonoBehaviour
                     Debug.Log("illegal move");
 
                 pieceChoose = null;
-                selectbox.hide();
+                selectBox.SetActive(false);
             }
             else
             {
@@ -123,7 +128,8 @@ public class BoardScript : MonoBehaviour
                     pieceChoose = null;
 
                 if (pieceChoose != null) {
-                    selectbox.MoveTo(pieceChoose.col, pieceChoose.row);
+                    selectBox.SetActive(true);
+                    selectBox.transform.localPosition = pieceChoose.transform.localPosition;
                     Debug.Log(pieceChoose);
                 }
             }
@@ -132,12 +138,12 @@ public class BoardScript : MonoBehaviour
 
     private void KingUpdate()
     {
-                // TEST CHECKMATE
+        // TEST CHECKMATE
         if (CheckMated(turnWhite))
         {
-            //threatbox.hide();
             AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
-            checkmatedbox.MoveTo(king.col, king.row);
+            checkmateBox.SetActive(true);
+            checkmateBox.transform.localPosition = king.transform.localPosition;
             Debug.Log("Checkmated");
 
             this.enabled = false;
@@ -145,12 +151,12 @@ public class BoardScript : MonoBehaviour
         else if (!KingSafety(turnWhite))
         {
             AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
-            threatbox.MoveTo(king.col, king.row); 
-
+            threatBox.SetActive(true);
+            threatBox.transform.localPosition = king.transform.localPosition;
         }
         else
         {
-            threatbox.hide();
+            threatBox.SetActive(false);
         }
         // TEST DRAW
         if (Draw())
@@ -531,24 +537,6 @@ public class BoardScript : MonoBehaviour
         this.FindPiece(fromCol, fromRow).MoveOrCapture(toCol, toRow);
         turnWhite = !turnWhite;
 
-        
-    //     // TEST CHECKMATE
-    //     if (CheckMated(turnWhite))
-    //     {
-    //         AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
-    //         checkmatedbox.MoveTo(king.col, king.row);
-    //         Debug.Log("Checkmated");
-    //         this.enabled = false;
-    //     }
-
-    //     // TEST DRAW
-    //     if (Draw())
-    //     {
-    //         Debug.Log("Draw");
-    //         this.enabled = false;
-    //     }
-    // }
-
         KingUpdate();
     }
     // flip the board
@@ -558,9 +546,6 @@ public class BoardScript : MonoBehaviour
 
         foreach (AbstractPieceScript piece in childScripts)
             piece.transform.localScale *= -1;
-
-        selectbox.transform.localScale *= -1;
-
     }
 
     // flip white ai
@@ -572,7 +557,7 @@ public class BoardScript : MonoBehaviour
         {
             // eliminate user choice of piece;
             pieceChoose = null;
-            selectbox.hide();
+            selectBox.SetActive(false);
         }
     }
 
@@ -585,7 +570,7 @@ public class BoardScript : MonoBehaviour
         {
             // eliminate user choice of piece;
             pieceChoose = null;
-            selectbox.hide();
+            selectBox.SetActive(false);
         }
     }
 
