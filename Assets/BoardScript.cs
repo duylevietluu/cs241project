@@ -98,40 +98,43 @@ public class BoardScript : MonoBehaviour
             if (col < 1 || col > 8 || row < 1 || row > 8)
                 return;
 
-            Debug.Log("Inside: " + col + " " + row);
+            //Debug.Log("Inside: " + col + " " + row);
 
-            if (pieceChoose != null)
+            AbstractPieceScript pieceClicked = FindPiece(col, row);
+
+            // user click the same square as pieceChoose, wishing to cancel the selection
+            if (pieceClicked == pieceChoose)
             {
-
-                if (pieceChoose.MoveOrCapture(col, row)) 
-                {
-                    turnWhite = !turnWhite;
-
-                    Debug.Log("piece moved");
-
-                    KingUpdate();
-                    
-                }
-                else
-                    Debug.Log("illegal move");
-
                 pieceChoose = null;
                 selectBox.SetActive(false);
             }
-            else
+            // a piece is already choosen, and user click an empty or opposing square
+            else if (pieceChoose != null && (pieceClicked == null || turnWhite != pieceClicked.isWhite))
             {
-                // find pieceChoose
-                pieceChoose = FindPiece(col, row);
-
-                // check if pieceChoose matches turn
-                if (pieceChoose != null && pieceChoose.isWhite != turnWhite)
-                    pieceChoose = null;
-
-                if (pieceChoose != null) {
-                    selectBox.SetActive(true);
-                    selectBox.transform.localPosition = pieceChoose.transform.localPosition;
-                    Debug.Log(pieceChoose);
+                if (pieceChoose.MoveOrCapture(col, row)) 
+                {
+                    turnWhite = !turnWhite;
+                    //Debug.Log("piece moved");
+                    KingUpdate();
                 }
+                else
+                {
+                    Debug.Log("illegal move");
+                }
+                
+                pieceChoose = null;
+                selectBox.SetActive(false);
+            }
+            // user click an ally non-empty square
+            else if (pieceClicked != null && turnWhite == pieceClicked.isWhite)
+            {
+                // assign pieceClicked to pieceChoose
+                pieceChoose = pieceClicked;
+
+                // move the selectBox
+                selectBox.SetActive(true);
+                selectBox.transform.localPosition = pieceChoose.transform.localPosition;
+                //Debug.Log(pieceChoose);
             }
         }
     }
