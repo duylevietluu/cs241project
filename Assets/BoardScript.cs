@@ -531,6 +531,9 @@ public class BoardScript : MonoBehaviour
         panel.SetActive(false);
         pawnPromoting = null;
         choicePromote = ' ';
+
+        // check if the King is checked, checkmated, or draw
+        KingUpdate();
     }
 
     // for interacting with the panel's buttons
