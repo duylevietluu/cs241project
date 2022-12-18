@@ -25,6 +25,7 @@ public class BoardScript : MonoBehaviour
     public bool whiteKingSide, whiteQueenSide, blackKingSide, blackQueenSide; // for castling
     public int passantCol, passantRow; // for en passant
     public PieceScript pawnGoneTwo; // for en passant
+    public int halfMovesCount; // number of halfmoves since the last pawn advance or capturing
 
     // panel & promote
     public GameObject panel;
@@ -37,7 +38,8 @@ public class BoardScript : MonoBehaviour
     // past positions for undo-ing
     public LinkedList<String> pastPositions;
 
-    // -------------------------------------------------------------------------------------------------
+    // ----------------------------------------------GAME FUNCTIONS---------------------------------------------------
+
     // Start is called before the first frame update
     void Start()
     {
@@ -83,6 +85,9 @@ public class BoardScript : MonoBehaviour
         else if (Input.GetMouseButtonDown(0))
             HandleUserClick();
     }
+
+
+    //--------------------------------------------OTHER FUNCTIONS BELOW-------------------------------------------------
 
     // for Start: find Pieces used for cloning, then hide these pieces
     void FindClonePieces()
@@ -160,6 +165,7 @@ public class BoardScript : MonoBehaviour
         choicePromote = ' ';
         whiteKingSide = true; whiteQueenSide = true;
         blackKingSide = true; blackQueenSide = true;
+        halfMovesCount = 0;
 
         // clear all pieces from the board
         ClearAllPieces();
@@ -284,6 +290,9 @@ public class BoardScript : MonoBehaviour
                 pawnGoneTwo = FindPieceAt(passantCol, 5);
         }
 
+        // options[4] halfMoveCounts
+        halfMovesCount = int.Parse(options[4]);
+
         KingUpdate();
     }
 
@@ -384,15 +393,43 @@ public class BoardScript : MonoBehaviour
                         OtherBlack++;
                 }
 
-            if (BishopKnightWhite <= 1 && OtherWhite <= 1
-                && BishopKnightBlack <= 1 && OtherBlack <= 1)
-                    return true;
+            if (BishopKnightWhite <= 1 && OtherWhite <= 1 && BishopKnightBlack <= 1 && OtherBlack <= 1)
+            {
+                Debug.Log("Draw by Insufficient material.");
+                return true;
+            }
         }
-
 
         // Stalemate
         if (KingSafety(turnWhite) && CantMoveAnything(turnWhite))
+        {
+            Debug.Log("Draw by Stalemate");
             return true;
+        }
+
+        // 50 moves rule
+        if (halfMovesCount >= 100)
+        {
+            Debug.Log("Draw by 50 moves rule");
+            return true;
+        }
+
+        // Three-fold repetition
+        string[] now = GetFenNotation().Split(' ');
+        int count = 0;
+        foreach (String position in pastPositions)
+        {
+            string[] past = position.Split(' ');
+            if (now[0] == past[0] && now[1] == past[1] && now[2] == past[2] && now[3] == past[3])
+            {
+                ++count;
+                if (count >= 2)
+                {
+                    Debug.Log("Draw by Threefold repetition rule");
+                    return true;
+                }
+            }
+        }
 
         return false;
     }
@@ -424,7 +461,7 @@ public class BoardScript : MonoBehaviour
         // TEST DRAW
         if (Draw())
         {
-            Debug.Log("Draw");
+            //Debug.Log("Draw");
             this.enabled = false;
         }
     }
@@ -443,30 +480,34 @@ public class BoardScript : MonoBehaviour
     }
 
     // for MoveOrCapture: called before any LEGAL actual move to check for passant and castle variables
-    public void UpdatePassantAndCastle(PieceScript piece, int tocol, int torow)
+    public void UpdatePassantAndCastle(PieceScript piece, PieceScript pieceTo, int tocol, int torow)
     {
         // save the position
         pastPositions.AddLast(GetFenNotation());
-        if (pastPositions.Count > 30) pastPositions.RemoveFirst();
+        if (pastPositions.Count > 10000) pastPositions.RemoveFirst(); // worried because out of memory
 
-        // check if any pawn has just go 2 steps up
-        if (piece.GetType() == typeof(PawnScript) && Math.Abs(torow - piece.row) == 2)
-            pawnGoneTwo = piece;
+        // check if it is a pawn advance or capturing
+        if (piece.GetType() == typeof(PawnScript) || pieceTo != null)
+            halfMovesCount = 0;
         else
-            pawnGoneTwo = null;
+            ++halfMovesCount;
 
+        // check if any pawn move 2 squares up
         if (piece.GetType() == typeof(PawnScript) && piece.row == 2 && torow == 4)
         {
+            pawnGoneTwo = piece;
             passantCol = piece.col;
             passantRow = 3;
         }
         else if (piece.GetType() == typeof(PawnScript) && piece.row == 7 && torow == 5)
         {
+            pawnGoneTwo = piece;
             passantCol = piece.col;
             passantRow = 6;
         }
         else
         {
+            pawnGoneTwo = null;
             // invalid col, row
             passantCol = 0;
             passantRow = 0;
@@ -691,10 +732,13 @@ public class BoardScript : MonoBehaviour
         }
         else
             ans.Append('-');
-        
+
+        // insert the number of half move since the last capture/ pawn advance
+        ans.Append(' ');
+        ans.Append(halfMovesCount);
 
         // insert number of moves, this is trivial
-        ans.Append(" 0 0");
+        ans.Append(" 0");
 
         return ans.ToString();
     }

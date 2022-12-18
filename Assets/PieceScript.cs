@@ -161,7 +161,7 @@ abstract public class PieceScript : MonoBehaviour
                 pieceTo = board.pawnGoneTwo;
 
             // update the game variables: en passant and castling availability
-            board.UpdatePassantAndCastle(this, tocol, torow);
+            board.UpdatePassantAndCastle(this, pieceTo, tocol, torow);
 
             // going
             this.TryGoTo(tocol, torow, pieceTo);

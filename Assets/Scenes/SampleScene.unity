@@ -3828,7 +3828,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 733655557}
         m_TargetAssemblyTypeName: BoardScript, Assembly-CSharp
-        m_MethodName: SetChoice
+        m_MethodName: SetPromotion
         m_Mode: 5
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
