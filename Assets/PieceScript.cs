@@ -5,14 +5,13 @@ using UnityEngine;
 using Unity.Mathematics;
 using System;
 
-abstract public class AbstractPieceScript : MonoBehaviour
+abstract public class PieceScript : MonoBehaviour
 {
     public int col, row;
-    public int oldCol, oldRow;
+    public int oldCol, oldRow; // for TryGoTo and UndoTry
     public bool isWhite;
     public BoardScript board;
-    public bool hasMoved; //used for castle checking
-    public AbstractPieceScript pieceCaptured = null, rookCastled = null;
+    public PieceScript pieceCaptured = null, rookCastled = null;
 
 
     // set col, row, isBlack
@@ -26,7 +25,12 @@ abstract public class AbstractPieceScript : MonoBehaviour
         row = colrow.y;
 
         isWhite = (row < 4);
-        hasMoved = false;
+    }
+
+    // update graphical location based on col, row
+    public void UpdateLocation()
+    {
+        transform.localPosition = new Vector3((float)(col - 0.5), (float)(row - 0.5), 0) + board.start;
     }
 
     abstract public bool LegalMove(int tocol, int torow);
@@ -36,7 +40,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
 
     // try to change the col, row of the piece
     // without changing sprite location
-    public void TryGoTo(int tocol, int torow, AbstractPieceScript pieceTo)
+    public void TryGoTo(int tocol, int torow, PieceScript pieceTo)
     {
         // CASTLING - move the rook
         if (this.GetType() == typeof(KingScript) && Mathf.Abs(tocol-col)==2)
@@ -44,7 +48,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
             // king side
             if (tocol == 7)
             {
-                rookCastled = board.FindPiece(8, row);
+                rookCastled = board.FindPieceAt(8, row);
                 //rook.col == 8
                 rookCastled.TryGoTo(6, rookCastled.row, null);
             }
@@ -52,7 +56,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
             // queen side
             else
             {
-                rookCastled = board.FindPiece(1, row);
+                rookCastled = board.FindPieceAt(1, row);
 
                 rookCastled.TryGoTo(4, rookCastled.row, null);
             }
@@ -68,23 +72,10 @@ abstract public class AbstractPieceScript : MonoBehaviour
         pieceCaptured = pieceTo;
 
         // delete pieceCaptured from the board, if any
-        if (pieceCaptured != null)
-            board.DeletePiece(pieceTo);
+        board.allPieces.Remove(pieceTo);
     }
 
-    // called after TryGoTo
-    // update based on col, row, oldcol, oldrow
-    public void UpdateLocation()
-    {
-        Vector3 vector3 = new Vector3(col - oldCol, row - oldRow);
-
-        transform.localPosition += vector3;
-
-        //transform.Translate(vector3, Space.Self);
-    }
-
-
-    // undo a move or capture: only 1 time
+    // undo the effect of TryGoTo
     public void UndoTry()
     {
         // undo set col & row
@@ -100,7 +91,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
         // CAPTURE - recover the piece
         if (pieceCaptured != null)
         {
-            board.RecoverPiece(pieceCaptured);
+            board.allPieces.Add(pieceCaptured);
             pieceCaptured = null;
         }
     }
@@ -111,7 +102,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
     public bool CanMoveOrCapture(int tocol, int torow)
     {
         // move/ capture to col row
-        AbstractPieceScript pieceTo = board.FindPiece(tocol, torow);
+        PieceScript pieceTo = board.FindPieceAt(tocol, torow);
 
         // capture
         if (pieceTo != null // there is a piece
@@ -141,7 +132,7 @@ abstract public class AbstractPieceScript : MonoBehaviour
         }
 
         // en passant
-        else if (PossiblePassant(tocol, torow)) 
+        else if (this.GetType() == typeof(PawnScript) && tocol == board.passantCol && torow == board.passantRow) 
         {
             this.TryGoTo(tocol, torow, board.pawnGoneTwo);
 
@@ -163,31 +154,28 @@ abstract public class AbstractPieceScript : MonoBehaviour
     {
         if (CanMoveOrCapture(tocol, torow))
         {
-            AbstractPieceScript pieceTo = board.FindPiece(tocol, torow);
+            PieceScript pieceTo = board.FindPieceAt(tocol, torow);
 
             // CHECK FOR EN PASSANT
-            if (PossiblePassant(tocol, torow))
+            if (this.GetType() == typeof(PawnScript) && tocol == board.passantCol && torow == board.passantRow)
                 pieceTo = board.pawnGoneTwo;
 
-            // check if any pawn has just go 2 steps up
-            if (this.GetType() == typeof(PawnScript) && Math.Abs(torow - row) == 2)
-                board.pawnGoneTwo = this;
-            else
-                board.pawnGoneTwo = null;
+            // update the game variables: en passant and castling availability
+            board.UpdatePassantAndCastle(this, tocol, torow);
 
             // going
             this.TryGoTo(tocol, torow, pieceTo);
 
+            // ACTUALLY REMOVE PIECETO
+            if (pieceTo != null)
+                board.DeletePiece(pieceTo);
+
             // move graphical location & set hasMoved
             this.UpdateLocation();
-            hasMoved = true;
 
             // do this on rookCastled, if any
             if (this.rookCastled != null)
-            {
                 rookCastled.UpdateLocation();
-                rookCastled.hasMoved = true;
-            }
             
             // pawn promotion checking
             if (this.GetType() == typeof(PawnScript) && (torow == 8 || torow == 1) )
@@ -223,15 +211,5 @@ abstract public class AbstractPieceScript : MonoBehaviour
                 return true;
         }
         return false;
-    }
-
-    // return if a passant can be performed at tocol,torow
-    public bool PossiblePassant(int tocol, int torow)
-    {
-        return this.GetType() == typeof(PawnScript) // a pawn
-            && board.pawnGoneTwo != null // an opposing pawn has gone 2 steps
-            && tocol == board.pawnGoneTwo.col // correct tocol
-            && ((this.isWhite && torow == 6) || (!this.isWhite && torow == 3)) // correct torow
-            && this.LegalCapture(tocol, torow); // legal capture
     }
 }

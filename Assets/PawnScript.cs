@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class PawnScript : AbstractPieceScript
+public class PawnScript : PieceScript
 {
 
     // return if it was possible to capture to a pos,

@@ -1,10 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices.WindowsRuntime;
 using UnityEngine;
 
-public class KingScript : AbstractPieceScript
+public class KingScript : PieceScript
 {
-    //public GameObject checkmatebox;
     // return if it was possible to capture to a pos,
     // given that there is an opposing piece at that pos
     public override bool LegalCapture(int tocol, int torow)
@@ -22,44 +22,42 @@ public class KingScript : AbstractPieceScript
     // given that the pos is empty
     public override bool LegalMove(int tocol, int torow)
     {
-        // castle King side
-        if (!hasMoved && row == torow && tocol == 7)
-        {
-            AbstractPieceScript
-                col6 = board.FindPiece(6, row),
-                col7 = board.FindPiece(7, row),
-                col8 = board.FindPiece(8, row);
+        // if King is moving with 1 square 
+        if (LegalCapture(tocol, torow))
+            return true;
 
-            if (col6 == null && col7 == null && col8 != null
-                && col8.GetType() == typeof(RookScript) && !col8.hasMoved
+        // else: definitely castling
+        if (row != torow)
+            return false;
+        
+        // King side
+        if (tocol == 7)
+        {
+            if (isWhite && !board.whiteKingSide) return false;
+            if (!isWhite && !board.blackKingSide) return false;
+
+            PieceScript col6 = board.FindPieceAt(6, row), col7 = board.FindPieceAt(7, row);
+
+            return (!PieceInBetween(col, row, tocol, torow)
                 && !board.KingSquareThreat(5, row, this.isWhite)
                 && !board.KingSquareThreat(6, row, this.isWhite)
-                && !board.KingSquareThreat(7, row, this.isWhite))
-            {
-                return true;
-            }
+                && !board.KingSquareThreat(7, row, this.isWhite));
         }
 
-        // castle Queen side
-        if (!hasMoved && row == torow && tocol == 3)
+        // Queen side
+        if (tocol == 3)
         {
-            AbstractPieceScript
-                col1 = board.FindPiece(1, row),
-                col2 = board.FindPiece(2, row),
-                col3 = board.FindPiece(3, row),
-                col4 = board.FindPiece(4, row);
+            if (isWhite && !board.whiteQueenSide) return false;
+            if (!isWhite && !board.blackQueenSide) return false;
 
-            if (col1 != null && col2 == null && col3 == null && col4 == null
-                && col1.GetType() == typeof(RookScript) && !col1.hasMoved
+            return (!PieceInBetween(col, row, tocol, torow)
                 && !board.KingSquareThreat(5, row, this.isWhite)
                 && !board.KingSquareThreat(4, row, this.isWhite)
-                && !board.KingSquareThreat(3, row, this.isWhite))
-            {
-                return true;
-            }
+                && !board.KingSquareThreat(3, row, this.isWhite));
+         
         }
 
 
-        return LegalCapture(tocol,torow);
+        return false;
     }
 }

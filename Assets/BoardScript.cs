@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Unity.Mathematics;
 using Unity.VisualScripting;
@@ -9,9 +10,10 @@ using UnityEngine;
 public class BoardScript : MonoBehaviour
 {
     // for pieces
+    public PieceScript[] clones;
     public Vector3 start;
-    AbstractPieceScript[] childScripts;
-    AbstractPieceScript pieceChoose = null;
+    public List<PieceScript> allPieces;
+    PieceScript pieceChoose;
 
     // for UI elements: highlighting the pieces
     GameObject selectBox;
@@ -19,57 +21,55 @@ public class BoardScript : MonoBehaviour
     GameObject threatBox;
 
     // for other chess game elements
-    public Boolean turnWhite = true, aiwhite = false, aiblack = false;
-    public AbstractPieceScript pawnGoneTwo = null; // for en passant
-
-    // stockfish AI
-    System.Diagnostics.Process stockfish = new System.Diagnostics.Process();
+    public bool turnWhite, aiwhite, aiblack; // for deciding turns
+    public bool whiteKingSide, whiteQueenSide, blackKingSide, blackQueenSide; // for castling
+    public int passantCol, passantRow; // for en passant
+    public PieceScript pawnGoneTwo; // for en passant
 
     // panel & promote
     public GameObject panel;
-    public AbstractPieceScript pawnPromoting = null;
-    public char choicePromote = ' ';
+    public PieceScript pawnPromoting;
+    public char choicePromote;
 
+    // stockfish
+    StockfishEngine stockfishEngine;
+
+    // past positions for undo-ing
+    public LinkedList<String> pastPositions;
+
+    // -------------------------------------------------------------------------------------------------
     // Start is called before the first frame update
     void Start()
     {
         start = new Vector3(-4, -4, 0);
 
-        // find Boxes
+        // find Boxes 
         selectBox = GameObject.Find("SelectBox");
-        selectBox.SetActive(false);
-
         checkmateBox = GameObject.Find("CheckmateBox");
-        checkmateBox.SetActive(false);
-
         threatBox = GameObject.Find("ThreatBox");
-        threatBox.SetActive(false);
 
-        // init for all pieces
-        childScripts = GetComponentsInChildren<AbstractPieceScript>();
-
-        foreach (AbstractPieceScript piece in childScripts)
-        {
-            piece.Init(this);
-        }
-
-        // init stockfish AI
-        stockfish.StartInfo.FileName = "Assets/stockfish_15_x64_avx2.exe";
-        stockfish.StartInfo.UseShellExecute = false;
-        stockfish.StartInfo.CreateNoWindow = true;
-        stockfish.StartInfo.RedirectStandardInput = true;
-        stockfish.StartInfo.RedirectStandardOutput = true;
-        stockfish.Start();
-
-        // Promotion Panel
+        // find Promotion Panel
         panel = GameObject.Find("PromotionPanel");
         panel.SetActive(false);
+
+        // find Pieces and hide them
+        FindClonePieces();
+
+        // set up game element
+        allPieces = new List<PieceScript>(64);
+        NewBoard();
+
+        // stockfish things
+        stockfishEngine = new StockfishEngine();
+
+        // init the stack pastPositions
+        pastPositions = new LinkedList<String>();
     }
 
     // Update is called once per frame
     void Update()
     {
-        // if we are choosing things
+        // if we are choosing promotion pawns
         if (pawnPromoting != null)
         {
             Promote(pawnPromoting);
@@ -78,101 +78,214 @@ public class BoardScript : MonoBehaviour
 
         // AI turn
         if ((aiwhite && turnWhite) || (aiblack && !turnWhite))
-        {
             PlayBestMove();
 
-            // PrintBestMove();
-        }
-
-        // user turn
+        // user turn && user click
         else if (Input.GetMouseButtonDown(0))
-        {          
-            Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            HandleUserClick();
+    }
 
-            //Debug.Log(mousePos.x + " " + mousePos.y);
+    // for Start: find Pieces used for cloning, then hide these pieces
+    void FindClonePieces()
+    {
+        clones = GetComponentsInChildren<PieceScript>();
 
-            int2 colrow = FindColRow(mousePos);
-            int col = colrow.x, row = colrow.y;
-
-            // Outside
-            if (col < 1 || col > 8 || row < 1 || row > 8)
-                return;
-
-            //Debug.Log("Inside: " + col + " " + row);
-
-            AbstractPieceScript pieceClicked = FindPiece(col, row);
-
-            // user click the same square as pieceChoose, wishing to cancel the selection
-            if (pieceClicked == pieceChoose)
-            {
-                pieceChoose = null;
-                selectBox.SetActive(false);
-            }
-            // a piece is already choosen, and user click an empty or opposing square
-            else if (pieceChoose != null && (pieceClicked == null || turnWhite != pieceClicked.isWhite))
-            {
-                if (pieceChoose.MoveOrCapture(col, row)) 
-                {
-                    turnWhite = !turnWhite;
-                    //Debug.Log("piece moved");
-                    KingUpdate();
-                }
-                else
-                {
-                    Debug.Log("illegal move");
-                }
-                
-                pieceChoose = null;
-                selectBox.SetActive(false);
-            }
-            // user click an ally non-empty square
-            else if (pieceClicked != null && turnWhite == pieceClicked.isWhite)
-            {
-                // assign pieceClicked to pieceChoose
-                pieceChoose = pieceClicked;
-
-                // move the selectBox
-                selectBox.SetActive(true);
-                selectBox.transform.localPosition = pieceChoose.transform.localPosition;
-                //Debug.Log(pieceChoose);
-            }
+        foreach (PieceScript piece in clones)
+        {
+            piece.Init(this);
+            piece.gameObject.SetActive(false);
         }
     }
 
-    private void KingUpdate()
+    // for NewBoard: Spawn a Piece with the PieceType, isWhite, col, row provided
+    public PieceScript SpawnPiece<PieceType>(bool isWhite, int col, int row) where PieceType : PieceScript
     {
-        // TEST CHECKMATE
-        if (CheckMated(turnWhite))
-        {
-            AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
-            checkmateBox.SetActive(true);
-            checkmateBox.transform.localPosition = king.transform.localPosition;
-            Debug.Log("Checkmated");
+        PieceScript fromClone = null, toClone;
 
-            this.enabled = false;
-        }
-        else if (!KingSafety(turnWhite))
+        foreach (PieceScript piece in clones)
+            if (piece.GetType() == typeof(PieceType) && piece.isWhite == isWhite)
+            {
+                fromClone = piece; 
+                break;
+            }
+
+        toClone = Instantiate(fromClone, this.transform);
+
+        toClone.transform.localPosition = fromClone.transform.localPosition;
+        toClone.transform.localRotation = fromClone.transform.localRotation;
+
+        toClone.Init(this);
+        toClone.col = col;
+        toClone.row = row;
+        toClone.UpdateLocation();
+        toClone.gameObject.SetActive(true);
+
+        allPieces.Add(toClone);
+
+        return toClone;
+    }
+
+    // for Capturing, Promotion, ClearAllPieces: delete piece from list childScripts and destroy the gameObject attached
+    public void DeletePiece(PieceScript piece)
+    {
+        allPieces.Remove(piece);
+        Destroy(piece.gameObject);
+    }
+
+    // for NewBoard: clear all piece
+    public void ClearAllPieces()
+    {
+        foreach (PieceScript piece in allPieces)
+            Destroy(piece.gameObject);
+        allPieces.Clear();
+    }
+
+    // for Start and Reset: set up a new board
+    public void NewBoard()
+    {
+        // re-enabled if this script is disabled
+        this.enabled = true;
+
+        // reset all UI elements
+        selectBox.SetActive(false);
+        threatBox.SetActive(false);
+        checkmateBox.SetActive(false);
+
+        // reset all game variables
+        pieceChoose = null;
+        turnWhite = true; aiwhite = false; aiblack = false;
+        pawnGoneTwo = null;
+        passantCol = 0; passantRow = 0;
+        pawnPromoting = null;
+        choicePromote = ' ';
+        whiteKingSide = true; whiteQueenSide = true;
+        blackKingSide = true; blackQueenSide = true;
+
+        // clear all pieces from the board
+        ClearAllPieces();
+
+        // Spawn Rooks
+        SpawnPiece<RookScript>(true, 1, 1);  SpawnPiece<RookScript>(true, 8, 1);
+        SpawnPiece<RookScript>(false, 1, 8); SpawnPiece<RookScript>(false, 8, 8);
+
+        // Spawn Knights
+        SpawnPiece<KnightScript>(true, 2, 1); SpawnPiece<KnightScript>(true, 7, 1);
+        SpawnPiece<KnightScript>(false, 2, 8); SpawnPiece<KnightScript>(false, 7, 8);
+
+        // Spawn Bishops
+        SpawnPiece<BishopScript>(true, 3, 1); SpawnPiece<BishopScript>(true, 6, 1);
+        SpawnPiece<BishopScript>(false, 3, 8); SpawnPiece<BishopScript>(false, 6, 8);
+
+        // Spawn Kings and Queens
+        SpawnPiece<QueenScript>(true, 4, 1); SpawnPiece<KingScript>(true, 5, 1);
+        SpawnPiece<QueenScript>(false, 4, 8); SpawnPiece<KingScript>(false, 5, 8);
+
+        // Spawn Pawns
+        for (int i = 1; i <= 8; ++i)
         {
-            AbstractPieceScript king = FindPieceType<KingScript>(turnWhite);
-            threatBox.SetActive(true);
-            threatBox.transform.localPosition = king.transform.localPosition;
+            SpawnPiece<PawnScript>(true, i, 2);
+            SpawnPiece<PawnScript>(false, i, 7);
+        }
+    }
+
+    // for Undo: build a board from the FEN notation
+    void NewBoardFen(string fen)
+    {
+        // re-enabled if this script is disabled
+        this.enabled = true;
+
+        // reset all UI elements
+        selectBox.SetActive(false);
+        threatBox.SetActive(false);
+        checkmateBox.SetActive(false);
+
+        // clear all pieces from the board
+        ClearAllPieces();
+
+        // reset all game variables
+        pieceChoose = null; 
+        aiwhite = false; aiblack = false;
+        pawnPromoting = null;
+        choicePromote = ' ';
+
+        // process FEN notation
+        string[] options = fen.Split(' ');
+
+        // options[0]: pieces in the board
+        string[] rows = options[0].Split('/');
+        for (int r = 8, row_id = 0; r > 0; --r, ++row_id)
+        {
+            string row = rows[row_id];
+            for (int c = 1, char_id = 0; c <= 8; ++c, ++char_id)
+                if (row[char_id] == 'p')
+                    SpawnPiece<PawnScript>(false, c, r);
+                else if (row[char_id] == 'P')
+                    SpawnPiece<PawnScript>(true, c, r);
+                else if (row[char_id] == 'r')
+                    SpawnPiece<RookScript>(false, c, r);
+                else if (row[char_id] == 'R')
+                    SpawnPiece<RookScript>(true, c, r);
+                else if (row[char_id] == 'n')
+                    SpawnPiece<KnightScript>(false, c, r);
+                else if (row[char_id] == 'N')
+                    SpawnPiece<KnightScript>(true, c, r);
+                else if (row[char_id] == 'b')
+                    SpawnPiece<BishopScript>(false, c, r);
+                else if (row[char_id] == 'B')
+                    SpawnPiece<BishopScript>(true, c, r);
+                else if (row[char_id] == 'q')
+                    SpawnPiece<QueenScript>(false, c, r);
+                else if (row[char_id] == 'Q')
+                    SpawnPiece<QueenScript>(true, c, r);
+                else if (row[char_id] == 'k')
+                    SpawnPiece<KingScript>(false, c, r);
+                else if (row[char_id] == 'K')
+                    SpawnPiece<KingScript>(true, c, r);
+                else // if the char is a number
+                {
+                    --c; // undo the ++c
+                    c += row[char_id] - '0'; 
+                }
+        }
+
+        // options[1] whose turn?
+        turnWhite = options[1] == "w";
+
+        // options[2] castling availablity
+        whiteKingSide = false; whiteQueenSide = false; blackKingSide = false; blackQueenSide = false;
+        foreach (char ch in options[2])
+            if (ch == 'K')
+                whiteKingSide = true;
+            else if (ch == 'k')
+                blackKingSide = true;
+            else if (ch == 'Q')
+                whiteQueenSide = true;
+            else if (ch == 'q')
+                blackQueenSide = true;
+
+        // options[3] en passant
+        if (options[3] == "-")
+        {
+            passantCol = 0; passantRow = 0;
+            pawnGoneTwo = null;
         }
         else
         {
-            threatBox.SetActive(false);
+            passantCol = options[3][0] - 'a' + 1;
+            passantRow = options[3][1] - '0';
+
+            if (passantRow == 3)
+                pawnGoneTwo = FindPieceAt(passantCol, 4);
+            else if (passantRow == 6)
+                pawnGoneTwo = FindPieceAt(passantCol, 5);
         }
-        // TEST DRAW
-        if (Draw())
-        {
-            Debug.Log("Draw");
-            this.enabled = false;
-        }
+
+        KingUpdate();
     }
 
-    // return the col and row of a given Vector3 pos in WorldSpace
+    // for handle user click: return the col and row of a given Vector3 pos in World Space
     public int2 FindColRow(Vector3 pos)
     {
-        //Vector3 diff = pos - start;
         Vector3 diff = transform.InverseTransformPoint(pos) - start;
 
         //Debug.Log(diff.x + " " + diff.y);
@@ -183,29 +296,29 @@ public class BoardScript : MonoBehaviour
         return new int2(col, row);
     }
 
-
-    // return reference to piece at row, col if available, otherwise return null
-    public AbstractPieceScript FindPiece(int col, int row)
+    // for all sort of functions: return reference to piece at row, col if available, otherwise return null
+    public PieceScript FindPieceAt(int col, int row)
     {
-        foreach (AbstractPieceScript piece in childScripts)
+        foreach (PieceScript piece in allPieces)
             if (piece.row == row && piece.col == col)
                 return piece;
 
         return null;
     }
 
+    // for checking if board has piece at specific location
     public bool HasPiece(int col, int row)
     {
-        return FindPiece(col, row) != null;
+        return FindPieceAt(col, row) != null;
     }
 
     // find a piece of the type
     // this can find even unavailable (disabled) pieces
-    public AbstractPieceScript FindPieceType<PieceType>(bool isWhite) where PieceType : AbstractPieceScript
+    public PieceScript FindKing(bool isWhite)
     {
-        AbstractPieceScript[] pieces = Resources.FindObjectsOfTypeAll<PieceType>();
+        PieceScript[] pieces = GetComponentsInChildren<KingScript>();
 
-        foreach (AbstractPieceScript piece in pieces)
+        foreach (PieceScript piece in pieces)
             if (piece.isWhite == isWhite)
                 return piece;
 
@@ -215,7 +328,7 @@ public class BoardScript : MonoBehaviour
     // return true if king is safe; false otherwise
     public bool KingSafety(bool kingWhite)
     {
-        AbstractPieceScript king = FindPieceType<KingScript>(kingWhite);
+        PieceScript king = FindKing(kingWhite);
         return !KingSquareThreat(king.col, king.row, king.isWhite);
     }
 
@@ -224,7 +337,7 @@ public class BoardScript : MonoBehaviour
     // because if they can capture the enemy King, their King is not important
     public bool KingSquareThreat(int col, int row, bool pieceWhite)
     {
-        foreach (AbstractPieceScript piece in childScripts)
+        foreach (PieceScript piece in allPieces)
             
             if (piece.isWhite != pieceWhite // opposing piece
                 && piece.LegalCapture(col, row)) // can capture
@@ -246,12 +359,12 @@ public class BoardScript : MonoBehaviour
     public bool Draw()
     {
         // Insufficient materials
-        if (childScripts.Length <= 4)
+        if (allPieces.Count <= 4)
         {
             int BishopKnightWhite = 0, OtherWhite = 0;
             int BishopKnightBlack = 0, OtherBlack = 0;
 
-            foreach (AbstractPieceScript piece in childScripts)
+            foreach (PieceScript piece in allPieces)
                 if (piece.isWhite)
                 {
                     if (piece.GetType() == typeof(BishopScript) || piece.GetType() == typeof(KnightScript))
@@ -280,10 +393,42 @@ public class BoardScript : MonoBehaviour
         return false;
     }
 
+    // for whenever a move is made: update if the king is checkmated or draw, so we can end the game
+    // save this position for later use
+    private void KingUpdate()
+    {
+        // TEST CHECKMATE
+        if (CheckMated(turnWhite))
+        {
+            PieceScript king = FindKing(turnWhite);
+            checkmateBox.SetActive(true);
+            checkmateBox.transform.localPosition = king.transform.localPosition;
+            Debug.Log("Checkmated");
+
+            this.enabled = false;
+        }
+        else if (!KingSafety(turnWhite))
+        {
+            PieceScript king = FindKing(turnWhite);
+            threatBox.SetActive(true);
+            threatBox.transform.localPosition = king.transform.localPosition;
+        }
+        else
+        {
+            threatBox.SetActive(false);
+        }
+        // TEST DRAW
+        if (Draw())
+        {
+            Debug.Log("Draw");
+            this.enabled = false;
+        }
+    }
+
     // return true if a side can move any of their piece, without leaving their king in check
     public bool CantMoveAnything(bool kingWhite)
     {
-        foreach (AbstractPieceScript piece in childScripts)
+        foreach (PieceScript piece in new List<PieceScript>(allPieces))
             if (piece.isWhite == kingWhite) // ally piece
                 for (int c = 1; c <= 8; c++)
                     for (int r = 1; r <= 8; r++)
@@ -293,35 +438,67 @@ public class BoardScript : MonoBehaviour
         return true;
     }
 
-    // delete piece from list childScripts and destroy the gameObject attached
-    public void DeletePiece(AbstractPieceScript piece)
+    // for MoveOrCapture: called before any LEGAL actual move to check for passant and castle variables
+    public void UpdatePassantAndCastle(PieceScript piece, int tocol, int torow)
     {
-        // find the index of piece
-        int i = Array.IndexOf(childScripts, piece);
-        int last = childScripts.Length - 1;
+        // save the position
+        pastPositions.AddLast(GetFenNotation());
+        if (pastPositions.Count > 30) pastPositions.RemoveFirst();
 
-        // swap the last piece with ith piece
-        childScripts[i] = childScripts[last];
+        // check if any pawn has just go 2 steps up
+        if (piece.GetType() == typeof(PawnScript) && Math.Abs(torow - piece.row) == 2)
+            pawnGoneTwo = piece;
+        else
+            pawnGoneTwo = null;
 
-        // resize childScript to length-1
-        Array.Resize(ref childScripts, last);
+        if (piece.GetType() == typeof(PawnScript) && piece.row == 2 && torow == 4)
+        {
+            passantCol = piece.col;
+            passantRow = 3;
+        }
+        else if (piece.GetType() == typeof(PawnScript) && piece.row == 7 && torow == 5)
+        {
+            passantCol = piece.col;
+            passantRow = 6;
+        }
+        else
+        {
+            // invalid col, row
+            passantCol = 0;
+            passantRow = 0;
+        }
 
-        // deactivate piece
-        // Destroy(piece.gameObject);
-        piece.gameObject.SetActive(false);
+        // King?
+        if (piece.GetType() == typeof(KingScript))
+        {
+            if (piece.isWhite)
+            { whiteKingSide = false; whiteQueenSide = false; }
+            else
+            { blackKingSide = false; blackQueenSide = false; }
+        }
+
+        // Rook on King side?
+        else if (piece.GetType() == typeof(RookScript) && piece.col == 8)
+        {
+            if (piece.isWhite && piece.row == 1)
+                whiteKingSide = false;
+            else if (!piece.isWhite && piece.row == 8)
+                blackKingSide = false;
+        }
+
+        else if (piece.GetType() == typeof(RookScript) && piece.col == 1)
+        {
+            if (piece.isWhite && piece.row == 1)
+                whiteQueenSide = false;
+            else if (!piece.isWhite && piece.row == 8)
+                blackQueenSide = false;
+        }
     }
 
-    public void RecoverPiece(AbstractPieceScript piece)
-    {
-        // add the piece to the list childScripts
-        Array.Resize(ref childScripts, childScripts.Length + 1);
-        childScripts[childScripts.Length - 1] = piece;
-
-        // activate piece
-        piece.gameObject.SetActive(true);
-    }
-
-    public void Promote(AbstractPieceScript pawn)
+    // for promotion: 
+    // if AI made the move: promote right away, using choice.
+    // if user moved: show the promotion panel and pause the program
+    public void Promote(PieceScript pawn)
     {
         if (pawnPromoting == null && !(aiwhite && turnWhite) && !(aiblack && !turnWhite))
         {
@@ -330,31 +507,21 @@ public class BoardScript : MonoBehaviour
             return;
         }
 
-        AbstractPieceScript copy;
+        PieceScript promoteTo;
 
         if (choicePromote == 'q')
-            copy = FindPieceType<QueenScript>(pawn.isWhite);
+            promoteTo = SpawnPiece<QueenScript>(pawn.isWhite, pawn.col, pawn.row);
         else if (choicePromote == 'r')
-            copy = FindPieceType<RookScript>(pawn.isWhite);
+            promoteTo = SpawnPiece<RookScript>(pawn.isWhite, pawn.col, pawn.row);
         else if (choicePromote == 'b')
-            copy = FindPieceType<BishopScript>(pawn.isWhite);
+            promoteTo = SpawnPiece<BishopScript>(pawn.isWhite, pawn.col, pawn.row);
         else if (choicePromote == 'n')
-            copy = FindPieceType<KnightScript>(pawn.isWhite);
+            promoteTo = SpawnPiece<KnightScript>(pawn.isWhite, pawn.col, pawn.row);
         else
             return;
-        
-        AbstractPieceScript promoteTo = Instantiate(copy, this.transform);
-
-        promoteTo.transform.localPosition = pawn.transform.localPosition;
-        promoteTo.transform.localRotation = pawn.transform.localRotation;
-
-        promoteTo.col = pawn.col; promoteTo.row = pawn.row;
-        promoteTo.board = this;
-        promoteTo.hasMoved = pawn.hasMoved;
-        promoteTo.pieceCaptured = null; promoteTo.rookCastled = null;
 
         DeletePiece(pawn);
-        RecoverPiece(promoteTo);
+        allPieces.Add(promoteTo);
 
         // set to default
         panel.SetActive(false);
@@ -362,11 +529,66 @@ public class BoardScript : MonoBehaviour
         choicePromote = ' ';
     }
 
-    public void SetChoice(String piece)
+    // for interacting with the panel's buttons
+    public void SetPromotion(String piece)
     {
         choicePromote = piece[0];
     }
 
+    // for user
+    // handle when user click the mouse
+    void HandleUserClick()
+    {
+        Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+        // translate this world position to col and row
+        int2 colrow = FindColRow(mousePos);
+        int col = colrow.x, row = colrow.y;
+
+        // if it is outside
+        if (col < 1 || col > 8 || row < 1 || row > 8)
+            return;
+
+        //Debug.Log("Inside: " + col + " " + row);
+
+        PieceScript pieceClicked = FindPieceAt(col, row);
+
+        // user click the same square as pieceChoose, wishing to cancel the selection
+        if (pieceClicked == pieceChoose)
+        {
+            pieceChoose = null;
+            selectBox.SetActive(false);
+        }
+        // a piece is already choosen, and user click an empty or opposing square
+        else if (pieceChoose != null && (pieceClicked == null || turnWhite != pieceClicked.isWhite))
+        {
+            if (pieceChoose.MoveOrCapture(col, row))
+            {
+                turnWhite = !turnWhite;
+                //Debug.Log("piece moved");
+                KingUpdate();
+            }
+            else
+            {
+                Debug.Log("illegal move");
+            }
+
+            pieceChoose = null;
+            selectBox.SetActive(false);
+        }
+        // user click an ally non-empty square
+        else if (pieceClicked != null && turnWhite == pieceClicked.isWhite)
+        {
+            // assign pieceClicked to pieceChoose
+            pieceChoose = pieceClicked;
+
+            // move the selectBox
+            selectBox.SetActive(true);
+            selectBox.transform.localPosition = pieceChoose.transform.localPosition;
+        }
+    }
+
+    // return the FEN Notation of the current board
     string GetFenNotation()
     {
         StringBuilder ans = new StringBuilder(100);
@@ -377,7 +599,7 @@ public class BoardScript : MonoBehaviour
             int blank = 0;
             for (int c = 1; c <= 8; ++c)
             {
-                AbstractPieceScript piece = FindPiece(c, r);
+                PieceScript piece = FindPieceAt(c, r);
                 if (piece == null)
                     blank++;
                 else
@@ -427,43 +649,27 @@ public class BoardScript : MonoBehaviour
         bool canCastle = false;
 
         // white castling avaibility
-        if (!FindPieceType<KingScript>(true).hasMoved)
+        if (whiteKingSide)
         {
-            // kingside
-            AbstractPieceScript rook = this.FindPiece(8, 1);
-            if (rook != null && !rook.hasMoved)
-            {
-                canCastle = true;
-                ans.Append('K');
-            }
-
-            // queenside
-            rook = this.FindPiece(1, 1);
-            if (rook != null && !rook.hasMoved)
-            {
-                canCastle = true;
-                ans.Append('Q');
-            }
+            canCastle = true;
+            ans.Append('K');
+        }
+        if (whiteQueenSide)
+        {
+            canCastle = true;
+            ans.Append('Q');
         }
 
         // black castling avaibility
-        if (!FindPieceType<KingScript>(false).hasMoved)
+        if (blackKingSide)
         {
-            // kingside
-            AbstractPieceScript rook = this.FindPiece(8, 8);
-            if (rook != null && !rook.hasMoved)
-            {
-                canCastle = true;
-                ans.Append('k');
-            }
-
-            // queenside
-            rook = this.FindPiece(1, 8);
-            if (rook != null && !rook.hasMoved)
-            {
-                canCastle = true;
-                ans.Append('q');
-            }
+            canCastle = true;
+            ans.Append('k');
+        }
+        if (blackQueenSide)
+        {
+            canCastle = true;
+            ans.Append('q');
         }
 
         // ending
@@ -473,15 +679,12 @@ public class BoardScript : MonoBehaviour
         // en passant target square
         if (pawnGoneTwo != null)
         {
-            ans.Append((char)('a' - 1 + pawnGoneTwo.col));
-
-            if (pawnGoneTwo.isWhite)
-                ans.Append(pawnGoneTwo.row - 1);
-            else
-                ans.Append(pawnGoneTwo.row + 1);
+            ans.Append((char)('a' - 1 + passantCol));
+            ans.Append(passantRow);
         }
         else
-            ans.Append("-");
+            ans.Append('-');
+        
 
         // insert number of moves, this is trivial
         ans.Append(" 0 0");
@@ -489,45 +692,11 @@ public class BoardScript : MonoBehaviour
         return ans.ToString();
     }
 
-    string GetBestMove()
-    {
-        string setupString = "position fen " + GetFenNotation();
-        stockfish.StandardInput.WriteLine(setupString);
-
-        // Process for 0.1 seconds
-        string processString = "go movetime 100";
-
-        // Process 20 deep
-        // string processString = "go depth 20";
-        
-        stockfish.StandardInput.WriteLine(processString);
-
-        string line;
-
-        do
-        {
-            line = stockfish.StandardOutput.ReadLine();
-        }
-        while (!(line.StartsWith("bestmove")));
-        
-        //stockfish.Close();
-
-        return line;
-    }
-    
-    // for user: print the best move for user
-    void PrintBestMove()
-    {
-        Debug.Log(GetBestMove());
-    }
-
     // for AI: play a best move, taken from Stockfish AI
     void PlayBestMove()
     {
         //Debug.Log("I'm thinking...");
-        string bestMove = GetBestMove() + " ";
-
-        bestMove = bestMove.Substring(9, 5);
+        string bestMove = stockfishEngine.GetBestMove(GetFenNotation()) ;
 
         int fromCol = bestMove[0] - 'a' + 1, fromRow = bestMove[1] - '0';
         int toCol = bestMove[2] - 'a' + 1, toRow = bestMove[3] - '0';
@@ -537,17 +706,21 @@ public class BoardScript : MonoBehaviour
         // promoting
         choicePromote = bestMove[4];
 
-        this.FindPiece(fromCol, fromRow).MoveOrCapture(toCol, toRow);
+        this.FindPieceAt(fromCol, fromRow).MoveOrCapture(toCol, toRow);
         turnWhite = !turnWhite;
 
         KingUpdate();
     }
+
     // flip the board
     public void FlipBoard()
     {
         transform.localScale *= -1;
 
-        foreach (AbstractPieceScript piece in childScripts)
+        foreach (PieceScript piece in clones)
+            piece.transform.localScale *= -1;
+
+        foreach (PieceScript piece in allPieces)
             piece.transform.localScale *= -1;
     }
 
@@ -591,6 +764,49 @@ public class BoardScript : MonoBehaviour
             FlipAIWhite();
             FlipBoard();
             FlipAIBlack();
+        }
+    }
+
+    // for Undo: pull the last position out of pastPositions, and build the board on it
+    void RewindOne()
+    {
+        if (pastPositions.Count == 0)
+        {
+            Debug.Log("Out of moves to Undo!");
+            return;
+        }
+
+        // pop the position out of the stack
+        String last = pastPositions.Last();
+        pastPositions.RemoveLast();
+
+        // build the board
+        NewBoardFen(last);
+    }
+
+    // for Undo Button:
+    // undo 1 move if both users are playing
+    // undo 2 moves if user are playing against AI
+    // no moves if an AI is in progress on moving their pieces
+    public void Undo()
+    {
+        if (!aiwhite && !aiblack)
+            RewindOne();
+        else if (!aiwhite && aiblack && turnWhite)
+        {
+            RewindOne();
+            RewindOne();
+            aiblack = true;
+        }
+        else if (aiwhite && !aiblack && !turnWhite)
+        {
+            RewindOne();
+            RewindOne();
+            aiwhite = true;
+        }
+        else
+        {
+            Debug.Log("You are trying to Undo when AI are thinking!");
         }
     }
 }

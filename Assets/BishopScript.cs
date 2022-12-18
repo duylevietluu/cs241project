@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class BishopScript : AbstractPieceScript
+public class BishopScript : PieceScript
 {
     // return if it was possible to capture to a pos,
     // given that there is an opposing piece at that pos

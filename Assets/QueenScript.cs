@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class QueenScript : AbstractPieceScript
+public class QueenScript : PieceScript
 {
     // return if it was possible to capture to a pos,
     // given that there is an opposing piece at that pos
