@@ -50,10 +50,12 @@ public class BoardScript : MonoBehaviour
 
         // find Promotion Panel
         panel = GameObject.Find("PromotionPanel");
-        panel.SetActive(false);
 
         // find Pieces and hide them
         FindClonePieces();
+
+        // init the stack pastPositions
+        pastPositions = new LinkedList<String>();
 
         // set up game element
         allPieces = new List<PieceScript>(64);
@@ -61,9 +63,6 @@ public class BoardScript : MonoBehaviour
 
         // stockfish things
         stockfishEngine = new StockfishEngine();
-
-        // init the stack pastPositions
-        pastPositions = new LinkedList<String>();
     }
 
     // Update is called once per frame
@@ -150,6 +149,7 @@ public class BoardScript : MonoBehaviour
         selectBox.SetActive(false);
         threatBox.SetActive(false);
         checkmateBox.SetActive(false);
+        panel.SetActive(false);
 
         // reset all game variables
         pieceChoose = null;
@@ -163,6 +163,9 @@ public class BoardScript : MonoBehaviour
 
         // clear all pieces from the board
         ClearAllPieces();
+
+        // clear pastPositions
+        pastPositions.Clear();
 
         // Spawn Rooks
         SpawnPiece<RookScript>(true, 1, 1);  SpawnPiece<RookScript>(true, 8, 1);
@@ -198,6 +201,7 @@ public class BoardScript : MonoBehaviour
         selectBox.SetActive(false);
         threatBox.SetActive(false);
         checkmateBox.SetActive(false);
+        panel.SetActive(false);
 
         // clear all pieces from the board
         ClearAllPieces();
