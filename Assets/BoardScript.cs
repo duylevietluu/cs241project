@@ -858,8 +858,19 @@ public class BoardScript : MonoBehaviour
     public void Undo()
     {
         if (!aiwhite && !aiblack)
+        {
             RewindOne();
-        else if (!aiwhite && aiblack && turnWhite)
+            return;
+        }
+
+        // user vs bot check 
+        if (pastPositions.Count <= 1)
+        {
+            Debug.Log("Out of moves to Undo!");
+            return;
+        }
+
+        if (!aiwhite && aiblack && turnWhite)
         {
             RewindOne();
             RewindOne();
