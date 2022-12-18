@@ -522,7 +522,7 @@ public class BoardScript : MonoBehaviour
             { blackKingSide = false; blackQueenSide = false; }
         }
 
-        // Rook on King side?
+        // Rook on King side moves
         else if (piece.GetType() == typeof(RookScript) && piece.col == 8)
         {
             if (piece.isWhite && piece.row == 1)
@@ -530,12 +530,28 @@ public class BoardScript : MonoBehaviour
             else if (!piece.isWhite && piece.row == 8)
                 blackKingSide = false;
         }
-
+        // Rook on Queen side moves
         else if (piece.GetType() == typeof(RookScript) && piece.col == 1)
         {
             if (piece.isWhite && piece.row == 1)
                 whiteQueenSide = false;
             else if (!piece.isWhite && piece.row == 8)
+                blackQueenSide = false;
+        }
+        // Rook on King side is captured, but never moved
+        else if (pieceTo != null && pieceTo.GetType() == typeof(RookScript) && tocol == 8)
+        {
+            if (whiteKingSide && pieceTo.isWhite && torow == 1)
+                whiteKingSide = false;
+            else if (blackKingSide && !pieceTo.isWhite && torow == 8)
+                blackKingSide = false;
+        }
+        // Rook on Queen side is captured, but never moved
+        else if (pieceTo != null && pieceTo.GetType() == typeof(RookScript) && tocol == 1)
+        {
+            if (whiteQueenSide && pieceTo.isWhite && torow == 1)
+                whiteQueenSide = false;
+            else if (blackQueenSide && !pieceTo.isWhite && torow == 8)
                 blackQueenSide = false;
         }
     }
